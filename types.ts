@@ -78,6 +78,7 @@ export interface ServerToClientEvents {
 // Events that the client sends to the server
 export interface ClientToServerEvents {
   'join-room': (roomId: string, userId: string, config?: { isPublic: boolean; name: string }) => void;
+  'leave-room': (payload: { roomId: string; userId: string }) => void;
   'offer': (payload: { targetUserId: string; userName: string; isScreenShare: boolean; offer: RTCSessionDescriptionInit }) => void;
   'answer': (payload: { targetUserId: string; userName: string; isScreenShare: boolean; answer: RTCSessionDescriptionInit }) => void;
   'ice-candidate': (payload: { targetUserId: string; candidate: RTCIceCandidateInit }) => void;

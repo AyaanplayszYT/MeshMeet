@@ -151,6 +151,37 @@ io.on('connection', (socket) => {
     socket.to(payload.roomId).emit('whiteboard-clear');
   });
 
+  // Handle explicit room leave (user clicks Leave button)
+  socket.on('leave-room', (payload: { roomId: string; userId: string }) => {
+    const { roomId, userId } = payload;
+    console.log(`User ${userId} leaving room ${roomId}`);
+    
+    // Leave the socket.io room
+    socket.leave(roomId);
+    
+    // Clean up user from room
+    const roomUsers = rooms.get(roomId);
+    if (roomUsers) {
+      roomUsers.delete(userId);
+      
+      // Cleanup empty room
+      if (roomUsers.size === 0) {
+        rooms.delete(roomId);
+        roomMetadata.delete(roomId);
+        console.log(`Room ${roomId} deleted (empty)`);
+      }
+    }
+    
+    // Notify others in the room
+    socket.to(roomId).emit('user-disconnected', userId);
+    
+    // Clean up mappings
+    userToRoom.delete(userId);
+    
+    // Broadcast updated room list
+    broadcastPublicRooms();
+  });
+
   socket.on('disconnect', () => {
     const userId = socketToUser.get(socket.id);
     if (userId) {

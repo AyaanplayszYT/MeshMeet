@@ -101,6 +101,24 @@ const App = () => {
     };
   }, [mode]);
 
+  // Cleanup on page unload (browser close, refresh, navigate away)
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (mode === 'room' && roomId && userId) {
+        signaling.emit('leave-room', { roomId, userId });
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also emit on component unmount
+      if (mode === 'room' && roomId && userId) {
+        signaling.emit('leave-room', { roomId, userId });
+      }
+    };
+  }, [mode, roomId, userId]);
+
   // Initialize camera for preview or join
   const initMedia = async () => {
     setIsLoading(true);
@@ -264,6 +282,10 @@ const App = () => {
   };
 
   const leaveRoom = () => {
+    // Notify server that we're leaving the room
+    if (roomId && userId) {
+      signaling.emit('leave-room', { roomId, userId });
+    }
     localStream?.getTracks().forEach(t => t.stop());
     screenStream?.getTracks().forEach(t => t.stop());
     setLocalStream(null);
