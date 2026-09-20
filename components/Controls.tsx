@@ -47,9 +47,9 @@ const Controls: React.FC<ControlsProps> = ({
   const [showReactions, setShowReactions] = useState(false);
 
   const buttonBase = "p-3.5 rounded-2xl transition-all duration-200 transform active:scale-95 flex items-center justify-center relative";
-  const buttonNormal = "bg-zinc-900/90 text-zinc-300 hover:bg-zinc-800 hover:text-white border border-zinc-700/50 hover:border-zinc-600";
-  const buttonActive = "bg-white text-black shadow-lg shadow-white/10 border border-white";
-  const buttonDanger = "bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/20";
+  const buttonNormal = "bg-white/[0.06] text-zinc-200 hover:bg-white/[0.12] hover:text-white border border-white/10 hover:border-white/20 backdrop-blur-md";
+  const buttonActive = "bg-white text-black shadow-lg shadow-white/20 border border-white";
+  const buttonDanger = "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 shadow-lg shadow-rose-500/10";
   
   const handleReaction = (emoji: string) => {
     onReaction(emoji);
@@ -61,7 +61,7 @@ const Controls: React.FC<ControlsProps> = ({
       
       {/* Reaction Popover */}
       {showReactions && (
-          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-zinc-900/90 backdrop-blur-xl border border-zinc-700 rounded-2xl p-2 flex gap-2 shadow-2xl animate-in slide-in-from-bottom-5 fade-in duration-200">
+          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-zinc-950/80 backdrop-blur-2xl border border-white/15 ring-1 ring-white/10 rounded-2xl p-2 flex gap-2 shadow-2xl animate-in slide-in-from-bottom-5 fade-in duration-200">
               <button onClick={() => handleReaction('❤️')} className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-colors">❤️</button>
               <button onClick={() => handleReaction('👍')} className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-colors">👍</button>
               <button onClick={() => handleReaction('😂')} className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-colors">😂</button>
@@ -69,7 +69,7 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
       )}
 
-      <div className="flex items-center gap-2 bg-black/90 backdrop-blur-2xl p-2 rounded-3xl border border-zinc-800 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+      <div className="flex items-center gap-2 bg-zinc-950/60 backdrop-blur-3xl p-2 sm:p-2.5 rounded-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.6),inset_0_1px_1px_0_rgba(255,255,255,0.15)]">
         
         <button
           onClick={onToggleMute}

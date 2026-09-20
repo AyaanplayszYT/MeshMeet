@@ -34,11 +34,29 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ roomId, isOpen, onClose }) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     
-    // Resize canvas to match container
+    // Resize canvas to match container while preserving content
     const resizeCanvas = () => {
-        if (containerRef.current && canvas) {
+        if (containerRef.current && canvas && ctx) {
+            const oldWidth = canvas.width;
+            const oldHeight = canvas.height;
+            let tempCanvas: HTMLCanvasElement | null = null;
+
+            if (oldWidth > 0 && oldHeight > 0) {
+                tempCanvas = document.createElement('canvas');
+                tempCanvas.width = oldWidth;
+                tempCanvas.height = oldHeight;
+                const tempCtx = tempCanvas.getContext('2d');
+                if (tempCtx) {
+                    tempCtx.drawImage(canvas, 0, 0);
+                }
+            }
+
             canvas.width = containerRef.current.clientWidth;
             canvas.height = containerRef.current.clientHeight;
+
+            if (tempCanvas && tempCanvas.width > 0 && tempCanvas.height > 0) {
+                ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
+            }
         }
     };
     

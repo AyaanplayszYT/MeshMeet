@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Video, Github, ScrollText, Wifi, WifiOff, Activity, ExternalLink, RefreshCw } from 'lucide-react';
+import { Github, ScrollText, Wifi, WifiOff, Activity, ExternalLink } from 'lucide-react';
 import { checkApiHealth, getApiUrl } from '../services/socket';
 
 interface NavbarProps {
@@ -33,29 +33,30 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-zinc-800/80 bg-black/70 backdrop-blur-xl">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-        {/* Left: Brand Identity */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.4)]">
-            <Video className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="font-bold text-lg text-white tracking-tight">MeshMeet</span>
-            <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
-              v2.0 P2P
-            </span>
-          </div>
+    <header className="sticky top-4 sm:top-5 z-40 w-full flex justify-center px-3 sm:px-6 pointer-events-none">
+      {/* True Glassmorphic Pill Navbar */}
+      <div className="max-w-4xl w-full bg-zinc-950/40 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 rounded-full px-3.5 sm:px-5 py-2 flex items-center justify-between gap-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.55),inset_0_1px_1px_0_rgba(255,255,255,0.15)] pointer-events-auto transition-all hover:border-white/20">
+        
+        {/* Left: Brand Identity with favicon.ico */}
+        <div className="flex items-center gap-2.5">
+          <img 
+            src="/favicon.ico" 
+            alt="MeetMesh" 
+            className="w-8 h-8 rounded-xl object-contain drop-shadow-[0_0_12px_rgba(255,255,255,0.25)]" 
+          />
+          <span className="font-bold text-base sm:text-lg text-white tracking-tight drop-shadow-sm">
+            MeshMeet
+          </span>
         </div>
 
-        {/* Right: Actions, Navigation & Status */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        {/* Right: Glass Actions, Navigation & Status */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
           {/* GitHub Source Link */}
           <a
             href="https://github.com/AyaanplayszYT/MeshMeet"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/90 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition-all text-xs font-medium"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-300 hover:text-white transition-all text-xs font-medium backdrop-blur-md shadow-sm"
             title="View Source on GitHub"
           >
             <Github className="w-3.5 h-3.5" />
@@ -67,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
             href="https://github.com/AyaanplayszYT/MeshMeet/releases"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/90 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition-all text-xs font-medium"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-300 hover:text-white transition-all text-xs font-medium backdrop-blur-md shadow-sm"
             title="View Releases & Changelog"
           >
             <ScrollText className="w-3.5 h-3.5" />
@@ -79,7 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
             href={`${apiUrl}/health`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/90 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition-all text-xs font-mono"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-300 hover:text-white transition-all text-xs font-mono backdrop-blur-md shadow-sm"
             title={`API Health: ${apiUrl}/health`}
           >
             <Activity className={`w-3.5 h-3.5 ${apiHealth?.ok ? 'text-emerald-400' : 'text-amber-400'}`} />
@@ -89,10 +90,10 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
 
           {/* Connection Status Badge */}
           <div
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold tracking-wide transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold tracking-wide backdrop-blur-md transition-all ${
               isConnected
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
-                : 'bg-rose-500/10 border-rose-500/30 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.15)]'
+                ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.2)]'
+                : 'bg-rose-500/15 border-rose-400/30 text-rose-400 shadow-[0_0_16px_rgba(244,63,94,0.2)]'
             }`}
           >
             {isConnected ? (
@@ -102,9 +103,9 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
                 <Wifi className="w-3.5 h-3.5" />
-                <span className="uppercase text-[11px]">Server Online</span>
+                <span className="uppercase text-[11px] hidden xs:inline">Online</span>
                 {apiHealth?.latency && (
-                  <span className="text-[10px] font-mono text-emerald-500/80 hidden sm:inline">
+                  <span className="text-[10px] font-mono text-emerald-300/90 hidden sm:inline">
                     {apiHealth.latency}ms
                   </span>
                 )}
@@ -112,7 +113,7 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
             ) : (
               <>
                 <WifiOff className="w-3.5 h-3.5" />
-                <span className="uppercase text-[11px]">Server Offline</span>
+                <span className="uppercase text-[11px]">Offline</span>
               </>
             )}
           </div>

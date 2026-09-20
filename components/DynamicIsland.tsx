@@ -89,7 +89,7 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
     >
       <div
         className={`
-          relative bg-black border border-zinc-800 shadow-2xl rounded-full
+          relative bg-zinc-950/70 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.6),inset_0_1px_1px_0_rgba(255,255,255,0.15)] rounded-full
           transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] overflow-hidden
           ${isExpanded ? 'w-[520px] h-[64px]' : 'w-[120px] h-[32px]'}
         `}

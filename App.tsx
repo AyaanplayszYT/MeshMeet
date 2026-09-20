@@ -443,7 +443,7 @@ const App = () => {
         
         {/* Host Controls Button */}
         {isHost && (
-          <div className="absolute top-20 right-4 z-40">
+          <div className="absolute top-4 sm:top-5 right-4 sm:right-6 z-40">
             <button
               onClick={() => setShowHostControls(true)}
               className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-zinc-900/90 border border-zinc-700 text-white hover:bg-zinc-800 transition-all shadow-xl backdrop-blur-md hover:scale-105"
@@ -473,7 +473,7 @@ const App = () => {
           onDenyUser={handleDenyUser}
         />
 
-        <main className="flex-1 w-full h-full relative z-10 flex flex-col">
+        <main className="flex-1 w-full h-full relative z-10 flex flex-col pt-16 sm:pt-20 pb-24 sm:pb-28 px-2 sm:px-4 min-h-0 overflow-hidden">
            {activeStream ? (
              <VideoGrid 
                 localStream={activeStream} 
@@ -620,10 +620,7 @@ const App = () => {
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-12 relative z-10 space-y-16">
         
         {/* Hero Section */}
-        <section className="text-center space-y-6 max-w-2xl mx-auto">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-zinc-900/90 border border-zinc-800 shadow-[0_0_50px_rgba(59,130,246,0.15)] animate-float">
-             <Video className="w-10 h-10 text-white" />
-          </div>
+        <section className="text-center space-y-4 max-w-2xl mx-auto pt-4">
           <div className="space-y-3">
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white via-zinc-200 to-zinc-500">
                 MeshMeet
@@ -837,7 +834,7 @@ const App = () => {
           <div className="inline-flex items-center gap-2 bg-black/80 backdrop-blur-xl px-5 py-2 rounded-full border border-zinc-800 shadow-2xl pointer-events-auto hover:bg-black transition-colors">
             <Copyright className="w-3 h-3 text-zinc-500" />
             <span className="text-[10px] text-zinc-400 font-medium font-mono uppercase tracking-widest">
-                2025 MeetMesh
+                2026 MeetMesh
             </span>
             <div className="w-px h-3 bg-zinc-800 mx-1"></div>
             <span className="text-[10px] text-zinc-400 font-medium font-mono">
