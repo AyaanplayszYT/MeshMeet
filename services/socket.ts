@@ -1,8 +1,8 @@
 import { io, Socket } from 'socket.io-client';
 import { ClientToServerEvents, ServerToClientEvents } from '../types';
 
-export const DEFAULT_SOCKET_URL = 'http://api.hostmc.cloud:25585';
-export const DEFAULT_API_URL = 'http://api.hostmc.cloud:25585/api';
+export const DEFAULT_SOCKET_URL = 'https://api.hostmc.cloud';
+export const DEFAULT_API_URL = 'https://api.hostmc.cloud/api';
 
 // Dynamic URL detection
 export const getSocketUrl = (): string => {
