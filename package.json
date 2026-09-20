@@ -6,10 +6,10 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite",
-    "dev:server": "tsx watch server.ts",
+    "dev:server": "tsx watch server/src/index.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "tsx server.ts"
+    "start": "tsx server/src/index.ts"
   },
   "dependencies": {
     "react": "^19.2.0",

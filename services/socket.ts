@@ -1,33 +1,76 @@
 import { io, Socket } from 'socket.io-client';
 import { ClientToServerEvents, ServerToClientEvents } from '../types';
 
-// Dynamic URL detection to support LAN/Network access and production deployment
-const getSocketUrl = (): string | undefined => {
-  // Check for environment variable first (production deployment)
-  const envUrl = import.meta.env.VITE_SOCKET_URL;
-  if (envUrl) {
-    return envUrl;
-  }
+export const DEFAULT_SOCKET_URL = 'http://api.hostmc.cloud:25585';
+export const DEFAULT_API_URL = 'http://api.hostmc.cloud:25585/api';
 
-  if (typeof window === 'undefined') return 'http://localhost:3001';
-  
-  const { protocol, hostname, port } = window.location;
-  
-  // If HTTPS, we assume the backend is behind the same reverse proxy/origin
-  if (protocol === 'https:') {
-      return undefined;
+// Dynamic URL detection
+export const getSocketUrl = (): string => {
+  const envUrl = import.meta.env.VITE_SOCKET_URL;
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim();
   }
-  
-  // If served from the backend port (3001), use relative path
-  if (port === '3001') {
-    return undefined;
+  return DEFAULT_SOCKET_URL;
+};
+
+export const getApiUrl = (): string => {
+  const envApiUrl = import.meta.env.VITE_API_URL;
+  if (envApiUrl && envApiUrl.trim()) {
+    return envApiUrl.trim();
   }
-  
-  // For standard local dev (e.g. Vite on 3000), assume backend is on port 3001 of the same host
-  return `${protocol}//${hostname}:3001`;
+  const socketUrl = getSocketUrl();
+  return `${socketUrl.replace(/\/$/, '')}/api`;
 };
 
 const SERVER_URL = getSocketUrl();
+
+export interface ApiHealthResponse {
+  status: string;
+  uptime: number;
+  timestamp: number;
+  serverTime: string;
+  activeRooms: number;
+  publicRooms: number;
+  activeConnections: number;
+  version: string;
+}
+
+export const checkApiHealth = async (timeoutMs = 4000): Promise<{ ok: boolean; data?: ApiHealthResponse; error?: string }> => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${getApiUrl()}/health`, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) {
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { ok: true, data };
+  } catch (err: any) {
+    return { ok: false, error: err.message || 'Connection failed' };
+  }
+};
+
+export const fetchPublicRoomsApi = async (timeoutMs = 4000) => {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(`${getApiUrl()}/rooms`, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json' }
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+};
+
 
 class SignalingService {
   public socket: Socket<ServerToClientEvents, ClientToServerEvents> | null = null;

@@ -1,0 +1,35 @@
+{
+  "name": "meetmesh-signaling-server",
+  "version": "2.0.0",
+  "description": "MeetMesh WebRTC Signaling and REST API Server",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "serve": "node dist/index.js"
+  },
+  "keywords": [
+    "webrtc",
+    "socket.io",
+    "signaling",
+    "meetmesh",
+    "video-conferencing"
+  ],
+  "author": "Mistiz911",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Video, Plus, ArrowRight, Loader2, Sparkles, Keyboard, ShieldCheck, Mic, MicOff, Video as VideoIcon, VideoOff, Users, Globe, Lock, RotateCcw, Home, Copyright, User as UserIcon, Wifi, WifiOff, DoorOpen, Check, X, Clock, Github, ScrollText } from 'lucide-react';
+import { Video, Plus, ArrowRight, Loader2, Sparkles, Keyboard, ShieldCheck, Mic, MicOff, Video as VideoIcon, VideoOff, Users, Globe, Lock, RotateCcw, Home, Copyright, User as UserIcon, Wifi, WifiOff, DoorOpen, Check, X, Clock, Github, ScrollText, Radio } from 'lucide-react';
 import { useWebRTC } from './hooks/useWebRTC';
 import { useBackgroundBlur } from './hooks/useBackgroundBlur';
 import { useLiveCaptions } from './hooks/useLiveCaptions';
@@ -9,6 +9,9 @@ import DynamicIsland from './components/DynamicIsland';
 import Chat from './components/Chat';
 import Whiteboard from './components/Whiteboard';
 import SettingsModal from './components/SettingsModal';
+import Navbar from './components/Navbar';
+import PublicRoomsHub from './components/PublicRoomsHub';
+import HostControlsModal from './components/HostControlsModal';
 import { signaling } from './services/socket';
 import { RoomInfo, RoomSettings, WaitingUser } from './types';
 
@@ -26,6 +29,7 @@ const App = () => {
   const [userId, setUserId] = useState('');
   const [username, setUsername] = useState('');
   const [isConnected, setIsConnected] = useState(false);
+  const [isRefreshingRooms, setIsRefreshingRooms] = useState(false);
   
   // Host & Room Settings State
   const [isHost, setIsHost] = useState(false);
@@ -78,6 +82,7 @@ const App = () => {
     
     signaling.on('rooms-update', (rooms: RoomInfo[]) => {
       setPublicRooms(rooms);
+      setIsRefreshingRooms(false);
     });
     
     // Waiting room & host events
@@ -125,7 +130,6 @@ const App = () => {
     
     // Periodic refresh of rooms
     const interval = setInterval(() => {
-        // Only request if connected to avoid queue buildup if offline
         if (signaling.connected) {
             signaling.emit('get-rooms');
         }
@@ -145,61 +149,37 @@ const App = () => {
       signaling.off('host-changed');
       signaling.off('room-closed');
       clearInterval(interval);
-    }
+    };
   }, []);
 
-  // Manage body scroll based on mode
-  useEffect(() => {
-    if (mode === 'room') {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'auto';
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, [mode]);
-
-  // Cleanup on page unload (browser close, refresh, navigate away)
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (mode === 'room' && roomId && userId) {
-        signaling.emit('leave-room', { roomId, userId });
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Also emit on component unmount
-      if (mode === 'room' && roomId && userId) {
-        signaling.emit('leave-room', { roomId, userId });
-      }
-    };
-  }, [mode, roomId, userId]);
-
-  // Initialize camera for preview or join
   const initMedia = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true
       });
       setLocalStream(stream);
-      setError(null);
-      return stream;
-    } catch (err) {
-      console.error('Error accessing media:', err);
-      setError('Camera/Microphone access denied.');
-      return null;
-    } finally {
       setIsLoading(false);
+      return stream;
+    } catch (err: any) {
+      console.warn("Standard media constraints failed, falling back to basic audio/video", err);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setLocalStream(stream);
+        setIsLoading(false);
+        return stream;
+      } catch (e: any) {
+        console.error("Camera access failed", e);
+        setError("Camera/Microphone permission denied or device not found.");
+        setIsLoading(false);
+        return null;
+      }
     }
   };
 
   useEffect(() => {
-    // Attach stream to preview video element
     if (mode === 'preview' && finalStream && previewVideoRef.current) {
         previewVideoRef.current.srcObject = finalStream;
     }
@@ -207,6 +187,9 @@ const App = () => {
 
   const handleCreateRoomClick = () => {
       setRoomId(generateId());
+      setRoomName('');
+      setIsPublic(false);
+      setWaitingRoomEnabled(false);
       setMode('create');
   };
 
@@ -219,19 +202,25 @@ const App = () => {
       if (stream) setMode('preview');
   };
 
-  const handleJoinPublicRoom = async (room: RoomInfo) => {
+  const handleJoinPublicRoom = (room: RoomInfo) => {
     setRoomId(room.roomId);
     setRoomName(room.name || room.roomId);
     setIsPublic(true); 
+    setWaitingRoomEnabled(!!room.waitingRoom);
     setMode('join'); 
-  }
+  };
+
+  const handleRefreshRooms = () => {
+    setIsRefreshingRooms(true);
+    if (signaling.connected) {
+      signaling.emit('get-rooms');
+    }
+  };
 
   const handleEnterRoom = () => {
       if (localStream) {
-          // Emit join-room with config and username - server will handle waiting room logic
           const config = { isPublic, name: roomName, waitingRoom: waitingRoomEnabled };
           signaling.emit('join-room', roomId, userId, config, username);
-          // Mode will be changed by room-joined or waiting-room event
       }
   };
   
@@ -361,7 +350,6 @@ const App = () => {
   };
 
   const leaveRoom = () => {
-    // Notify server that we're leaving the room
     if (roomId && userId) {
       signaling.emit('leave-room', { roomId, userId });
     }
@@ -392,21 +380,23 @@ const App = () => {
   if (mode === 'waiting') {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-zinc-900/30 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 backdrop-blur-xl">
-          <div className="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Clock className="w-10 h-10 text-yellow-500 animate-pulse" />
+        <div className="max-w-md w-full bg-zinc-900/40 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 backdrop-blur-xl shadow-2xl">
+          <div className="w-20 h-20 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+            <Clock className="w-10 h-10 text-amber-400 animate-pulse" />
           </div>
-          <h2 className="text-3xl font-bold text-white">Waiting Room</h2>
-          <p className="text-zinc-400">
-            Please wait for the host to let you in.
-          </p>
-          <div className="flex items-center justify-center gap-2 text-zinc-500 text-sm">
-            <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-            Waiting for approval...
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-white tracking-tight">Waiting for Host Approval</h2>
+            <p className="text-zinc-400 text-sm">
+              The host of this meeting has enabled a waiting room. You will be admitted shortly.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-2 text-zinc-400 text-xs py-2 px-4 rounded-full bg-zinc-800/60 border border-zinc-700/60 w-fit mx-auto">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span>Waiting in queue...</span>
           </div>
           <button 
             onClick={handleGoHome} 
-            className="w-full py-4 rounded-2xl bg-zinc-800 text-white font-medium hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3.5 rounded-2xl bg-zinc-800 text-white font-medium hover:bg-zinc-700 transition-colors flex items-center justify-center gap-2 text-sm"
           >
             <Home className="w-4 h-4" /> Leave Waiting Room
           </button>
@@ -419,17 +409,19 @@ const App = () => {
   if (mode === 'denied') {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-zinc-900/30 border border-red-900/30 rounded-3xl p-8 text-center space-y-6 backdrop-blur-xl">
-          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <X className="w-10 h-10 text-red-500" />
+        <div className="max-w-md w-full bg-zinc-900/40 border border-rose-900/30 rounded-3xl p-8 text-center space-y-6 backdrop-blur-xl shadow-2xl">
+          <div className="w-20 h-20 bg-rose-500/10 border border-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
+            <X className="w-10 h-10 text-rose-500" />
           </div>
-          <h2 className="text-3xl font-bold text-white">Access Denied</h2>
-          <p className="text-zinc-400">
-            The host has denied your request to join this meeting.
-          </p>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-white tracking-tight">Access Denied</h2>
+            <p className="text-zinc-400 text-sm">
+              The host was unable to admit you to this meeting session.
+            </p>
+          </div>
           <button 
             onClick={handleGoHome} 
-            className="w-full py-4 rounded-2xl bg-white text-black font-bold hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2"
+            className="w-full py-3.5 rounded-2xl bg-white text-black font-bold hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 text-sm"
           >
             <Home className="w-4 h-4" /> Back to Home
           </button>
@@ -444,92 +436,42 @@ const App = () => {
       <div className="h-screen w-full flex flex-col relative overflow-hidden bg-black text-white font-sans">
         <DynamicIsland 
           roomId={roomId}
-          participantCount={(1) + remoteStreams.size} // 1 is self
+          participantCount={(1) + remoteStreams.size}
           isMuted={isMuted}
           isVideoStopped={isVideoStopped}
         />
         
-        {/* Host Controls Panel */}
+        {/* Host Controls Button */}
         {isHost && (
-          <div className="absolute top-20 right-4 z-50">
+          <div className="absolute top-20 right-4 z-40">
             <button
-              onClick={() => setShowHostControls(!showHostControls)}
-              className={`p-3 rounded-2xl transition-all ${showHostControls ? 'bg-white text-black' : 'bg-zinc-900/90 text-white border border-zinc-700'} hover:scale-105`}
+              onClick={() => setShowHostControls(true)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-zinc-900/90 border border-zinc-700 text-white hover:bg-zinc-800 transition-all shadow-xl backdrop-blur-md hover:scale-105"
+              title="Host Controls"
             >
-              <ShieldCheck className="w-5 h-5" />
+              <ShieldCheck className="w-4 h-4 text-blue-400" />
+              <span className="text-xs font-semibold">Host</span>
+              {waitingUsers.length > 0 && (
+                <span className="w-5 h-5 rounded-full bg-amber-500 text-black text-[10px] font-bold flex items-center justify-center animate-pulse">
+                  {waitingUsers.length}
+                </span>
+              )}
             </button>
-            
-            {showHostControls && (
-              <div className="absolute top-14 right-0 w-72 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-2xl p-4 space-y-4 shadow-2xl animate-in slide-in-from-top-2">
-                <div className="flex items-center gap-2 pb-3 border-b border-zinc-800">
-                  <ShieldCheck className="w-4 h-4 text-blue-400" />
-                  <span className="text-sm font-bold text-white">Host Controls</span>
-                </div>
-                
-                {/* Room Lock Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">Lock Room</span>
-                  </div>
-                  <button
-                    onClick={handleToggleLock}
-                    className={`w-12 h-6 rounded-full transition-all ${roomSettings.isLocked ? 'bg-red-500' : 'bg-zinc-700'}`}
-                  >
-                    <div className={`w-5 h-5 rounded-full bg-white shadow transform transition-all ${roomSettings.isLocked ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-                
-                {/* Waiting Room Toggle */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <DoorOpen className="w-4 h-4 text-zinc-400" />
-                    <span className="text-sm text-zinc-300">Waiting Room</span>
-                  </div>
-                  <button
-                    onClick={handleToggleWaitingRoom}
-                    className={`w-12 h-6 rounded-full transition-all ${roomSettings.waitingRoom ? 'bg-green-500' : 'bg-zinc-700'}`}
-                  >
-                    <div className={`w-5 h-5 rounded-full bg-white shadow transform transition-all ${roomSettings.waitingRoom ? 'translate-x-6' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-                
-                {/* Waiting Users List */}
-                {waitingUsers.length > 0 && (
-                  <div className="pt-3 border-t border-zinc-800">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Users className="w-4 h-4 text-yellow-500" />
-                      <span className="text-xs font-bold text-yellow-500 uppercase">Waiting ({waitingUsers.length})</span>
-                    </div>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {waitingUsers.map(user => (
-                        <div key={user.odId} className="flex items-center justify-between bg-zinc-800/50 rounded-xl p-2">
-                          <span className="text-sm text-white truncate flex-1">{user.userName}</span>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => handleAdmitUser(user.odId)}
-                              className="p-1.5 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
-                              title="Admit"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDenyUser(user.odId)}
-                              className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-                              title="Deny"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         )}
+
+        {/* Host Controls Modal */}
+        <HostControlsModal
+          isOpen={showHostControls}
+          onClose={() => setShowHostControls(false)}
+          roomId={roomId}
+          roomSettings={roomSettings}
+          waitingUsers={waitingUsers}
+          onToggleLock={handleToggleLock}
+          onToggleWaitingRoom={handleToggleWaitingRoom}
+          onAdmitUser={handleAdmitUser}
+          onDenyUser={handleDenyUser}
+        />
 
         <main className="flex-1 w-full h-full relative z-10 flex flex-col">
            {activeStream ? (
@@ -667,143 +609,116 @@ const App = () => {
 
   // --- Render Landing Page (Home) ---
   return (
-    <div className="min-h-screen p-4 relative bg-black selection:bg-blue-500/30 pb-20">
-      
+    <div className="min-h-screen relative bg-black selection:bg-blue-500/30 pb-24 text-zinc-100 flex flex-col">
       {/* Dynamic Grid Background */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:128px_128px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none fixed"></div>
       
-      {/* GitHub Source Link - Top Left Corner */}
-      <a 
-        href="https://github.com/AyaanplayszYT/MeshMeet" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="fixed top-4 left-4 z-50 flex items-center gap-2 px-3 py-2 rounded-full bg-zinc-900/80 border border-zinc-800 backdrop-blur-md hover:bg-zinc-800 hover:border-zinc-700 transition-all group"
-      >
-        <Github className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
-        <span className="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Source</span>
-      </a>
+      {/* Top Navigation Bar */}
+      <Navbar isConnected={isConnected} onRefreshRooms={handleRefreshRooms} />
 
-      {/* Changelog Button - Next to GitHub */}
-      <a 
-        href="https://github.com/AyaanplayszYT/MeshMeet/releases" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="fixed top-4 left-[140px] z-50 flex items-center gap-2 px-3 py-2 rounded-full bg-zinc-900/80 border border-zinc-800 backdrop-blur-md hover:bg-zinc-800 hover:border-zinc-700 transition-all group"
-      >
-        <ScrollText className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
-        <span className="text-xs font-medium text-zinc-400 group-hover:text-white transition-colors">Changelog</span>
-      </a>
-
-      <div className="max-w-4xl mx-auto pt-10 relative z-10 space-y-12">
+      {/* Main Content Area */}
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-12 relative z-10 space-y-16">
         
-        {/* Connection Status Badge */}
-        <div className="flex justify-end">
-             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border backdrop-blur-md transition-colors ${isConnected ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-                 {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                 <span className="text-xs font-bold uppercase tracking-wider">{isConnected ? 'Online' : 'Offline'}</span>
-             </div>
-        </div>
-
-        {/* Header */}
-        <div className="text-center space-y-6">
-          <div className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-zinc-900 border border-zinc-800 mb-2 shadow-[0_0_40px_rgba(255,255,255,0.05)] animate-float">
-             <Video className="w-12 h-12 text-white" />
+        {/* Hero Section */}
+        <section className="text-center space-y-6 max-w-2xl mx-auto">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-zinc-900/90 border border-zinc-800 shadow-[0_0_50px_rgba(59,130,246,0.15)] animate-float">
+             <Video className="w-10 h-10 text-white" />
           </div>
-          <div className="space-y-4">
-            <h1 className="text-7xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white to-zinc-500">
+          <div className="space-y-3">
+            <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white via-zinc-200 to-zinc-500">
                 MeshMeet
             </h1>
-            <p className="text-zinc-500 text-xl font-medium max-w-md mx-auto">
-                Secure, peer-to-peer video calls with zero server footprint.
+            <p className="text-zinc-400 text-lg sm:text-xl font-normal max-w-lg mx-auto leading-relaxed">
+                Peer-to-peer, encrypted video meetings powered by WebRTC mesh networks.
             </p>
           </div>
-        </div>
+        </section>
 
         {/* Error Banner */}
         {error && (
-            <div className="max-w-md mx-auto p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm text-center font-medium animate-in slide-in-from-top-2">
+            <div className="max-w-md mx-auto p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-400 text-sm text-center font-medium animate-in slide-in-from-top-2">
                 {error}
             </div>
         )}
 
         {/* Action Card */}
-        <div className="max-w-md mx-auto bg-zinc-900/30 backdrop-blur-xl border border-zinc-800/50 p-2 rounded-[32px] shadow-2xl transition-all hover:border-zinc-700/50">
+        <section className="max-w-md mx-auto bg-zinc-900/40 backdrop-blur-2xl border border-zinc-800/80 rounded-[32px] p-2 shadow-2xl transition-all hover:border-zinc-700/60">
           
           {mode === 'home' && (
              <div className="p-6 space-y-4">
                 <button 
                   onClick={handleCreateRoomClick}
                   disabled={isLoading}
-                  className="group w-full h-20 rounded-2xl bg-white text-black font-bold text-xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="group w-full h-16 rounded-2xl bg-white text-black font-bold text-lg hover:bg-zinc-200 transition-all flex items-center justify-center gap-3 shadow-[0_0_30px_rgba(255,255,255,0.15)] hover:shadow-[0_0_40px_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {isLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Plus className="w-6 h-6 group-hover:rotate-90 transition-transform" />}
+                    {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />}
                     Start New Meeting
                 </button>
 
                 <button 
                   onClick={() => setMode('join')}
-                  className="w-full h-16 rounded-2xl bg-zinc-800/50 text-white font-medium hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 border border-zinc-700/50 hover:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full h-14 rounded-2xl bg-zinc-800/60 text-white font-medium hover:bg-zinc-800 transition-all flex items-center justify-center gap-3 border border-zinc-700/60 hover:border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
-                  <Keyboard className="w-5 h-5 text-zinc-400" />
+                  <Keyboard className="w-4 h-4 text-zinc-400" />
                   Join with Code
                 </button>
              </div>
           )}
 
           {mode === 'create' && (
-              <form onSubmit={(e) => { e.preventDefault(); handleProceedToPreview(); }} className="p-6 space-y-6">
+              <form onSubmit={(e) => { e.preventDefault(); handleProceedToPreview(); }} className="p-6 space-y-5">
                  <div className="space-y-4">
                      <div>
-                        <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 mb-2">Your Name</label>
+                        <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1 mb-2">Your Display Name</label>
                         <div className="relative">
-                            <UserIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                            <UserIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-500" />
                             <input
                                 type="text"
                                 required
                                 autoFocus
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="e.g. John Doe"
-                                className="w-full bg-black/50 border border-zinc-700 rounded-2xl pl-12 pr-5 py-4 text-white placeholder-zinc-700 focus:outline-none focus:border-white/50 transition-all"
+                                placeholder="e.g. Ayaan"
+                                className="w-full bg-black/60 border border-zinc-700/80 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-all"
                             />
                         </div>
                      </div>
 
                      <div>
-                        <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 mb-2">Room Name (Optional)</label>
+                        <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1 mb-2">Room Name (Optional)</label>
                         <input
                             type="text"
                             value={roomName}
                             onChange={(e) => setRoomName(e.target.value)}
-                            placeholder="e.g. Daily Standup"
-                            className="w-full bg-black/50 border border-zinc-700 rounded-2xl px-5 py-4 text-white placeholder-zinc-700 focus:outline-none focus:border-white/50 transition-all"
+                            placeholder="e.g. Engineering Standup"
+                            className="w-full bg-black/60 border border-zinc-700/80 rounded-2xl px-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-all"
                         />
                      </div>
                      
-                     <div className="flex gap-2 p-1 bg-black/50 border border-zinc-800 rounded-xl">
+                     <div className="flex gap-2 p-1 bg-black/60 border border-zinc-800 rounded-xl">
                          <button 
                            type="button" 
                            onClick={() => setIsPublic(false)}
-                           className={`flex-1 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${!isPublic ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+                           className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${!isPublic ? 'bg-zinc-800 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
                          >
-                            <Lock className="w-4 h-4" /> Private
+                            <Lock className="w-3.5 h-3.5" /> Private
                          </button>
                          <button 
                            type="button" 
                            onClick={() => setIsPublic(true)}
-                           className={`flex-1 py-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${isPublic ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
+                           className={`flex-1 py-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${isPublic ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}
                          >
-                            <Globe className="w-4 h-4" /> Public
+                            <Globe className="w-3.5 h-3.5" /> Public
                          </button>
                      </div>
 
                      {/* Waiting Room Toggle */}
-                     <label className="flex items-center justify-between p-4 bg-black/50 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
+                     <label className="flex items-center justify-between p-3.5 bg-black/60 border border-zinc-800 rounded-xl cursor-pointer hover:border-zinc-700 transition-all">
                          <div className="flex items-center gap-3">
-                             <DoorOpen className="w-5 h-5 text-zinc-400" />
+                             <DoorOpen className="w-4 h-4 text-zinc-400" />
                              <div>
-                                 <span className="text-sm font-medium text-white">Waiting Room</span>
-                                 <p className="text-xs text-zinc-500">Approve users before they join</p>
+                                 <span className="text-xs font-semibold text-white">Waiting Room</span>
+                                 <p className="text-[11px] text-zinc-500">Approve users before they join</p>
                              </div>
                          </div>
                          <div className="relative">
@@ -813,26 +728,26 @@ const App = () => {
                                  onChange={(e) => setWaitingRoomEnabled(e.target.checked)}
                                  className="sr-only peer"
                              />
-                             <div className="w-11 h-6 bg-zinc-700 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
-                             <div className="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow-md transform peer-checked:translate-x-5 transition-transform"></div>
+                             <div className="w-10 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+                             <div className="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-md transform peer-checked:translate-x-5 transition-transform"></div>
                          </div>
                      </label>
                  </div>
 
-                 <div className="flex gap-3">
+                 <div className="flex gap-3 pt-2">
                    <button 
                      type="button"
                      onClick={() => setMode('home')}
-                     className="rounded-2xl bg-transparent border border-zinc-800 px-6 py-4 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-all font-bold"
+                     className="rounded-2xl bg-transparent border border-zinc-800 px-5 py-3.5 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all font-semibold text-sm"
                    >
                      Back
                    </button>
                    <button 
                      type="submit"
                      disabled={!username.trim()}
-                     className="flex-1 rounded-2xl bg-white text-black p-4 font-bold transition-all flex items-center justify-center gap-2 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                     className="flex-1 rounded-2xl bg-white text-black py-3.5 px-5 font-bold text-sm transition-all flex items-center justify-center gap-2 hover:bg-zinc-200 disabled:opacity-50 disabled:cursor-not-allowed"
                    >
-                     Create <ArrowRight className="w-5 h-5" />
+                     Create Meeting <ArrowRight className="w-4 h-4" />
                    </button>
                  </div>
               </form>
@@ -842,122 +757,91 @@ const App = () => {
             <form onSubmit={(e) => { e.preventDefault(); handleProceedToPreview(); }} className="p-6 space-y-4">
                <div className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 mb-2">Room Code</label>
+                        <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1 mb-2">Room Code</label>
                         <input
                             type="text"
                             required
                             autoFocus
                             value={roomId}
-                            // FIXED: Force lowercase and remove any spaces/symbols to prevent ID mismatches
                             onChange={(e) => setRoomId(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''))}
-                            placeholder="x8k29a"
-                            className="w-full bg-black/50 border border-zinc-700 rounded-2xl px-5 py-4 text-white placeholder-zinc-700 focus:outline-none focus:border-white/50 transition-all font-mono text-xl tracking-wide"
+                            placeholder="e.g. x8k29a"
+                            className="w-full bg-black/60 border border-zinc-700/80 rounded-2xl px-4 py-3.5 text-white placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-all font-mono text-base tracking-wider"
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1 mb-2">Your Name</label>
+                        <label className="block text-xs font-bold text-zinc-400 uppercase tracking-wider ml-1 mb-2">Your Display Name</label>
                         <div className="relative">
-                            <UserIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-zinc-500" />
+                            <UserIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-zinc-500" />
                             <input
                                 type="text"
                                 required
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="e.g. Jane Doe"
-                                className="w-full bg-black/50 border border-zinc-700 rounded-2xl pl-12 pr-5 py-4 text-white placeholder-zinc-700 focus:outline-none focus:border-white/50 transition-all"
+                                placeholder="e.g. Ayaan"
+                                className="w-full bg-black/60 border border-zinc-700/80 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-all"
                             />
                         </div>
                     </div>
                </div>
                
-               <div className="grid grid-cols-2 gap-3 pt-4">
+               <div className="grid grid-cols-2 gap-3 pt-3">
                  <button 
                    type="button"
                    onClick={() => setMode('home')}
-                   className="rounded-2xl bg-transparent border border-zinc-800 p-4 text-zinc-400 hover:text-white hover:bg-zinc-900 transition-all text-sm font-bold"
+                   className="rounded-2xl bg-transparent border border-zinc-800 p-3.5 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all text-sm font-semibold"
                  >
                    Back
                  </button>
                  <button 
                    type="submit"
                    disabled={isLoading || !roomId.trim() || !username.trim()}
-                   className="rounded-2xl bg-white text-black p-4 font-bold transition-all flex items-center justify-center gap-2 hover:bg-zinc-200 shadow-lg shadow-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                   className="rounded-2xl bg-white text-black p-3.5 font-bold transition-all flex items-center justify-center gap-2 hover:bg-zinc-200 shadow-md disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                  >
-                   {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Join <ArrowRight className="w-5 h-5" /></>}
+                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Join <ArrowRight className="w-4 h-4" /></>}
                  </button>
                </div>
             </form>
           )}
-        </div>
+        </section>
         
-        {/* Public Rooms Section */}
+        {/* Rebuilt Public Rooms Section */}
         {mode === 'home' && (
-            <div className="space-y-6">
-                <div className="flex items-center gap-3 px-2">
-                    <Globe className="w-5 h-5 text-blue-500" />
-                    <h3 className="text-xl font-bold text-white">Active Public Rooms</h3>
-                    <div className="h-px flex-1 bg-zinc-800" />
-                </div>
-                
-                {publicRooms.length === 0 ? (
-                    <div className="text-center py-12 border border-dashed border-zinc-800 rounded-3xl">
-                        <p className="text-zinc-600">No public rooms active right now.</p>
-                        <button onClick={handleCreateRoomClick} className="text-blue-500 hover:text-blue-400 text-sm font-medium mt-2">Be the first to create one</button>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {publicRooms.map((room) => (
-                            <div key={room.roomId} className="group bg-zinc-900/50 border border-zinc-800 hover:border-zinc-600 p-5 rounded-2xl transition-all hover:bg-zinc-900 relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                                    <Users className="w-16 h-16 text-white" />
-                                </div>
-                                <div className="relative z-10 space-y-4">
-                                    <div>
-                                        <h4 className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors truncate">{room.name}</h4>
-                                        <p className="text-zinc-500 text-xs font-mono">ID: {room.roomId}</p>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2 text-zinc-400 text-sm bg-black/50 px-3 py-1 rounded-full border border-zinc-800">
-                                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                            {room.count} Online
-                                        </div>
-                                        <button 
-                                          onClick={() => handleJoinPublicRoom(room)}
-                                          className="bg-white text-black px-4 py-2 rounded-xl text-sm font-bold hover:scale-105 transition-transform"
-                                        >
-                                            Join
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+          <PublicRoomsHub
+            rooms={publicRooms}
+            onJoinRoom={handleJoinPublicRoom}
+            onCreateRoom={handleCreateRoomClick}
+            onRefresh={handleRefreshRooms}
+            isRefreshing={isRefreshingRooms}
+          />
         )}
 
-        <div className="flex justify-center gap-8 opacity-40 pt-10 pb-20">
-            <div className="flex items-center gap-2 text-xs text-zinc-500 font-medium">
-                <ShieldCheck className="w-4 h-4 text-zinc-600" />
+        {/* Feature Highlights Row */}
+        <section className="flex flex-wrap justify-center items-center gap-6 sm:gap-10 py-6 border-t border-zinc-900 text-zinc-500">
+            <div className="flex items-center gap-2 text-xs font-medium">
+                <ShieldCheck className="w-4 h-4 text-zinc-400" />
                 <span>End-to-End Encrypted</span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-zinc-500 font-medium">
-                <Sparkles className="w-4 h-4 text-zinc-600" />
+            <div className="flex items-center gap-2 text-xs font-medium">
+                <Sparkles className="w-4 h-4 text-zinc-400" />
                 <span>P2P Mesh Network</span>
             </div>
-        </div>
-      </div>
+            <div className="flex items-center gap-2 text-xs font-medium">
+                <Radio className="w-4 h-4 text-zinc-400" />
+                <span>Sub-100ms WebRTC</span>
+            </div>
+        </section>
+      </main>
       
       {/* Footer Branding */}
-      <footer className="fixed bottom-4 left-0 right-0 z-50 text-center pointer-events-none">
-          <div className="inline-flex items-center gap-2 bg-black/60 backdrop-blur-xl px-5 py-2.5 rounded-full border border-zinc-800/80 shadow-2xl pointer-events-auto hover:bg-black/80 transition-colors">
-            <Copyright className="w-3 h-3 text-zinc-600" />
+      <footer className="fixed bottom-4 left-0 right-0 z-30 text-center pointer-events-none">
+          <div className="inline-flex items-center gap-2 bg-black/80 backdrop-blur-xl px-5 py-2 rounded-full border border-zinc-800 shadow-2xl pointer-events-auto hover:bg-black transition-colors">
+            <Copyright className="w-3 h-3 text-zinc-500" />
             <span className="text-[10px] text-zinc-400 font-medium font-mono uppercase tracking-widest">
-                2025 MeshMeet
+                2025 MeetMesh
             </span>
-            <div className="w-px h-3 bg-zinc-700 mx-1"></div>
-            <span className="text-[10px] text-zinc-500 font-medium font-mono">
-                Made by <span className="text-blue-400 font-bold ml-0.5 glow-text">Mistiz911</span>
+            <div className="w-px h-3 bg-zinc-800 mx-1"></div>
+            <span className="text-[10px] text-zinc-400 font-medium font-mono">
+                Made by <span className="text-blue-400 font-bold ml-0.5">Mistiz911</span>
             </span>
           </div>
       </footer>
