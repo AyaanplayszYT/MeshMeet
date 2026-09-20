@@ -79,10 +79,13 @@ class SignalingService {
   constructor() {
     try {
       this.socket = io(SERVER_URL, {
-        transports: ['websocket'],
+        transports: ['polling', 'websocket'],
         autoConnect: false,
+        reconnection: true,
         reconnectionAttempts: Infinity,
-        timeout: 10000,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
       });
     } catch (e) {
       console.warn('Socket.io client failed to initialize.');

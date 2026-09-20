@@ -75,7 +75,12 @@ export const useBackgroundBlur = (rawStream: MediaStream | null) => {
   useEffect(() => {
     // Processing Loop
     const processVideo = async () => {
-      if (videoRef.current.readyState >= 2 && selfieSegmentationRef.current) {
+      if (
+        videoRef.current.readyState >= 2 &&
+        videoRef.current.videoWidth > 0 &&
+        videoRef.current.videoHeight > 0 &&
+        selfieSegmentationRef.current
+      ) {
          try {
              await selfieSegmentationRef.current.send({ image: videoRef.current });
          } catch (e) {
@@ -116,8 +121,6 @@ export const useBackgroundBlur = (rawStream: MediaStream | null) => {
         // Stop processing
         cancelAnimationFrame(animationFrameRef.current);
         if (videoRef.current.srcObject) {
-            const stream = videoRef.current.srcObject as MediaStream;
-            stream.getTracks().forEach(t => t.stop()); // Stop the hidden video stream copy
             videoRef.current.srcObject = null;
         }
         setProcessedStream(null);
