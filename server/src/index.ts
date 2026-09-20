@@ -301,7 +301,7 @@ io.on('connection', (socket: Socket) => {
     const waiting = waitingRooms.get(roomId);
     const waitingUser = waiting?.get(odId);
 
-    if (waitingUser) {
+    if (waitingUser && waiting) {
       waiting.delete(odId);
       const targetSocket = io.sockets.sockets.get(waitingUser.socketId);
 
@@ -339,12 +339,12 @@ io.on('connection', (socket: Socket) => {
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(roomId);
 
-    if (meta?.hostId !== hostUserId) return;
+    if (!meta || meta.hostId !== hostUserId) return;
 
     const waiting = waitingRooms.get(roomId);
     const waitingUser = waiting?.get(odId);
 
-    if (waitingUser) {
+    if (waitingUser && waiting) {
       waiting.delete(odId);
       const targetSocket = io.sockets.sockets.get(waitingUser.socketId);
       if (targetSocket) {
@@ -366,7 +366,7 @@ io.on('connection', (socket: Socket) => {
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(roomId);
 
-    if (meta?.hostId !== hostUserId) return;
+    if (!meta || meta.hostId !== hostUserId) return;
 
     meta.isLocked = !meta.isLocked;
     console.log(`[Room ${roomId}] Lock toggled: ${meta.isLocked}`);
@@ -380,7 +380,7 @@ io.on('connection', (socket: Socket) => {
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(roomId);
 
-    if (meta?.hostId !== hostUserId) return;
+    if (!meta || meta.hostId !== hostUserId) return;
 
     meta.waitingRoom = !meta.waitingRoom;
     console.log(`[Room ${roomId}] Waiting room toggled: ${meta.waitingRoom}`);
