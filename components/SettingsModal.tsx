@@ -132,13 +132,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 pb-24 sm:pb-12 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="w-full max-w-3xl bg-zinc-950/90 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 rounded-[32px] shadow-[0_25px_80px_rgba(0,0,0,0.9),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden flex flex-col max-h-[82vh]">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/[0.02]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-500/15 border border-blue-500/30 rounded-2xl">
+            <div className="p-2 bg-blue-500/15 border border-blue-500/30 rounded-xl">
               <Settings className="w-5 h-5 text-blue-400" />
             </div>
             <div>
@@ -156,18 +156,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* 2-Column Responsive Body */}
-        <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-4 sm:p-5 overflow-y-auto min-h-0 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
           
           {/* Left Column: Video / Camera Settings */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-zinc-300 text-xs font-bold uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-zinc-300 text-xs font-bold uppercase tracking-wider pb-1">
               <Camera className="w-4 h-4 text-blue-400" />
               <span>Camera Devices</span>
             </div>
 
             <div className="space-y-2">
               {cameras.length === 0 && (
-                <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-zinc-500 text-xs">
+                <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-800 text-zinc-500 text-xs">
                   No cameras detected. Check browser permissions.
                 </div>
               )}
@@ -177,10 +177,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     key={device.deviceId}
                     onClick={() => onDeviceChange('videoinput', device.deviceId)}
-                    className={`w-full text-left px-4 py-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                    className={`w-full text-left px-3.5 py-3 rounded-xl border transition-colors flex items-center justify-between gap-3 ${
                       isSelected
-                        ? 'bg-blue-600/20 border-blue-500/50 text-white shadow-md' 
-                        : 'bg-white/[0.02] border-white/10 text-zinc-300 hover:bg-white/[0.05] hover:border-white/20'
+                        ? 'bg-blue-600/15 border-blue-500/50 text-white'
+                        : 'bg-zinc-950/40 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600'
                     }`}
                   >
                     <span className="truncate text-sm font-medium">{device.label}</span>
@@ -190,7 +190,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               })}
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 space-y-1">
+            <div className="p-3.5 rounded-xl bg-zinc-950/40 border border-zinc-800 space-y-1">
               <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wide">Video Quality</span>
               <p className="text-xs text-zinc-500 leading-relaxed">
                 Hardware-accelerated HD video with automatic resolution scaling based on network throughput.
@@ -202,10 +202,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="space-y-5">
             
             {/* Audio Output / Chimes */}
-            <div className="p-4 bg-white/[0.03] border border-white/10 rounded-2xl space-y-3">
+            <div className="p-3.5 bg-zinc-950/40 border border-zinc-700 rounded-xl space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className={`p-2 rounded-xl ${soundEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-zinc-500'}`}>
+                  <div className={`p-2 rounded-lg ${soundEnabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-500'}`}>
                     {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                   </div>
                   <div>
@@ -234,7 +234,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={handleTestChime}
-                    className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all flex items-center gap-1.5 border border-white/10"
+                    className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition-colors flex items-center gap-1.5 border border-zinc-700"
                   >
                     <Sparkles className="w-3 h-3 text-amber-400" />
                     Play Chime
@@ -265,7 +265,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div className="space-y-2">
                 {mics.length === 0 && (
-                  <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-zinc-500 text-xs">
+                  <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-800 text-zinc-500 text-xs">
                     No microphones detected. Check browser permissions.
                   </div>
                 )}
@@ -275,10 +275,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       key={device.deviceId}
                       onClick={() => onDeviceChange('audioinput', device.deviceId)}
-                      className={`w-full text-left px-4 py-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                      className={`w-full text-left px-3.5 py-3 rounded-xl border transition-colors flex items-center justify-between gap-3 ${
                         isSelected
-                          ? 'bg-emerald-600/20 border-emerald-500/50 text-white shadow-md' 
-                          : 'bg-white/[0.02] border-white/10 text-zinc-300 hover:bg-white/[0.05] hover:border-white/20'
+                          ? 'bg-emerald-600/15 border-emerald-500/50 text-white'
+                          : 'bg-zinc-950/40 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:border-zinc-600'
                       }`}
                     >
                       <span className="truncate text-sm font-medium">{device.label}</span>
@@ -293,10 +293,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 px-6 border-t border-white/10 bg-white/[0.01] flex justify-end">
+        <div className="p-4 px-5 border-t border-zinc-800 flex justify-end shrink-0">
           <button
             onClick={onClose}
-            className="px-6 py-2.5 rounded-2xl bg-white text-black font-bold hover:bg-zinc-200 transition-all shadow-md text-sm"
+            className="px-6 py-2.5 rounded-xl bg-white text-black font-bold hover:bg-zinc-200 transition-colors text-sm"
           >
             Done
           </button>

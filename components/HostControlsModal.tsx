@@ -29,6 +29,7 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
   onAdmitAll,
 }) => {
   const [admittingIds, setAdmittingIds] = useState<Set<string>>(new Set());
+  const [copied, setCopied] = useState(false);
 
   const handleAdmit = (odId: string) => {
     setAdmittingIds(prev => new Set(prev).add(odId));
@@ -58,13 +59,13 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="w-full max-w-md bg-zinc-950/85 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 rounded-[32px] p-6 shadow-[0_25px_70px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] space-y-6 text-white relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="w-full max-w-lg max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-hidden bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl text-white relative flex flex-col">
         
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shadow-inner">
+            <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center">
               <ShieldCheck className="w-5 h-5 text-blue-400" />
             </div>
             <div>
@@ -80,15 +81,16 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
           </button>
         </div>
 
+        <div className="p-5 overflow-y-auto space-y-5">
         {/* Quick Room Share Box */}
-        <div className="flex items-center justify-between p-4 bg-white/[0.04] border border-white/10 rounded-2xl">
+        <div className="flex items-center justify-between gap-3 p-3.5 bg-zinc-950/60 border border-zinc-700 rounded-xl">
           <div className="space-y-0.5">
             <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest font-bold">Invite Link</span>
             <p className="text-sm font-bold font-mono text-white tracking-wider">#{roomId}</p>
           </div>
           <button
             onClick={handleCopyLink}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all border border-white/10 shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white transition-colors border border-zinc-700 shrink-0"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? 'Copied' : 'Copy Link'}</span>
@@ -96,11 +98,11 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
         </div>
 
         {/* Toggles */}
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {/* Lock Room Toggle */}
-          <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/10 rounded-2xl hover:border-white/20 transition-all">
+          <div className="flex items-center justify-between gap-3 p-3.5 bg-zinc-950/40 border border-zinc-700 rounded-xl hover:border-zinc-600 transition-colors">
             <div className="flex items-center gap-3">
-              <div className={`p-2.5 rounded-xl ${roomSettings.isLocked ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-white/5 text-zinc-400'}`}>
+              <div className={`p-2 rounded-lg ${roomSettings.isLocked ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
                 {roomSettings.isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
               </div>
               <div>
@@ -123,9 +125,9 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
           </div>
 
           {/* Waiting Room Toggle */}
-          <div className="flex items-center justify-between p-4 bg-white/[0.03] border border-white/10 rounded-2xl hover:border-white/20 transition-all">
+          <div className="flex items-center justify-between gap-3 p-3.5 bg-zinc-950/40 border border-zinc-700 rounded-xl hover:border-zinc-600 transition-colors">
             <div className="flex items-center gap-3">
-              <div className={`p-2.5 rounded-xl ${roomSettings.waitingRoom ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-zinc-400'}`}>
+              <div className={`p-2 rounded-lg ${roomSettings.waitingRoom ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'}`}>
                 <DoorOpen className="w-4 h-4" />
               </div>
               <div>
@@ -169,7 +171,7 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
           </div>
 
           {waitingUsers.length === 0 ? (
-            <div className="p-5 text-center bg-white/[0.02] border border-white/5 rounded-2xl">
+            <div className="p-5 text-center bg-zinc-950/40 border border-zinc-800 rounded-xl">
               <p className="text-xs text-zinc-500">No participants currently in the waiting room.</p>
             </div>
           ) : (
@@ -177,7 +179,7 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
               {waitingUsers.map((user) => (
                 <div
                   key={user.odId}
-                  className="flex items-center justify-between p-3 bg-white/[0.04] border border-white/10 rounded-xl"
+                  className="flex items-center justify-between gap-3 p-3 bg-zinc-950/45 border border-zinc-700 rounded-xl"
                 >
                   <div className="flex items-center gap-2.5">
                     <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center justify-center text-xs font-bold">
@@ -217,13 +219,17 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
           )}
         </div>
 
+        </div>
+
         {/* Done Button */}
-        <button
-          onClick={onClose}
-          className="w-full py-3.5 rounded-2xl bg-white text-black font-bold hover:bg-zinc-200 transition-all shadow-lg"
-        >
-          Done
-        </button>
+        <div className="p-5 pt-0 shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full py-3 rounded-xl bg-white text-black font-bold hover:bg-zinc-200 transition-colors"
+          >
+            Done
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -388,7 +388,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({
   ];
   
   const count = streams.length;
-  const isCompact = count > 9;
+  const isCompact = count > 6;
   
   // Check if anyone is screen sharing
   const screenShareStream = streams.find(s => s.isScreenShare);
@@ -403,17 +403,6 @@ const VideoGrid: React.FC<VideoGridProps> = ({
 
   const togglePin = (id: string) => {
     setPinnedPeerId(prev => (prev === id ? null : id));
-  };
-
-  // Dimension helper for auto-centering and balanced layouts
-  const getTileClasses = (n: number) => {
-    if (n === 1) return 'w-full max-w-4xl max-h-full';
-    if (n === 2) return 'w-full md:w-[calc(50%-0.75rem)] max-w-2xl max-h-full';
-    if (n === 3) return 'w-full sm:w-[calc(50%-0.75rem)] lg:w-[calc(33.333%-0.75rem)] max-w-xl max-h-[calc(50vh-5rem)]';
-    if (n === 4) return 'w-[calc(50%-0.5rem)] sm:w-[calc(50%-0.75rem)] max-w-xl max-h-[calc(50vh-5rem)]';
-    if (n <= 6) return 'w-[calc(50%-0.5rem)] md:w-[calc(33.333%-0.75rem)] max-w-lg max-h-[calc(50vh-5rem)]';
-    if (n <= 9) return 'w-[calc(50%-0.5rem)] sm:w-[calc(33.333%-0.75rem)] max-w-md max-h-[calc(33.333vh-4rem)]';
-    return 'w-[calc(33.333%-0.5rem)] md:w-[calc(25%-0.75rem)] max-w-sm max-h-[calc(25vh-3rem)]';
   };
 
   // Spotlight Layout (either Pinned participant or Screen Share)
@@ -471,9 +460,16 @@ const VideoGrid: React.FC<VideoGridProps> = ({
 
   // Standard auto-centering grid layout
   return (
-    <div className="w-full h-full flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+    <div className="w-full h-full min-h-0 flex items-center justify-center p-1 sm:p-3 overflow-hidden">
       <div 
-        className="w-full h-full flex flex-wrap items-center justify-center content-center gap-3 sm:gap-4 overflow-hidden transition-all duration-300"
+        className={`w-full h-full min-h-0 grid items-center justify-items-center gap-2 sm:gap-3 overflow-hidden transition-all duration-300 ${
+          count === 1 ? 'grid-cols-1 grid-rows-1' :
+          count === 2 ? 'grid-cols-1 sm:grid-cols-2 grid-rows-1' :
+          count <= 4 ? 'grid-cols-2 grid-rows-2' :
+          count <= 6 ? 'grid-cols-2 sm:grid-cols-3 grid-rows-2' :
+          count <= 9 ? 'grid-cols-2 sm:grid-cols-3 grid-rows-3' :
+          'grid-cols-3 sm:grid-cols-4'
+        }`}
         style={{
           maxWidth: count === 1 ? '1100px' : count === 2 ? '1300px' : count <= 4 ? '1200px' : '100%',
         }}
@@ -481,7 +477,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({
         {streams.map((p) => (
           <div
             key={p.id}
-            className={`aspect-video flex items-center justify-center transition-all duration-300 ease-out shrink-0 ${getTileClasses(count)}`}
+            className="w-full h-full min-h-0 min-w-0 flex items-center justify-center transition-all duration-300 ease-out overflow-hidden"
           >
             <VideoTile 
               stream={p.stream} 

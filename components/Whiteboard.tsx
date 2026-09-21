@@ -160,19 +160,22 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      let targetW = w ?? img.naturalWidth;
-      let targetH = h ?? img.naturalHeight;
+      const displayWidth = canvas.clientWidth || canvas.width;
+      const displayHeight = canvas.clientHeight || canvas.height;
+      const pixelRatio = canvas.width / displayWidth;
+      let targetW = w === undefined ? img.naturalWidth : (w <= 1 ? w * displayWidth : w / pixelRatio);
+      let targetH = h === undefined ? img.naturalHeight : (h <= 1 ? h * displayHeight : h / pixelRatio);
 
-      const maxW = canvas.width * 0.55;
-      const maxH = canvas.height * 0.55;
+      const maxW = displayWidth * 0.55;
+      const maxH = displayHeight * 0.55;
       if (!w || !h) {
         const scale = Math.min(1, maxW / targetW, maxH / targetH);
         targetW = targetW * scale;
         targetH = targetH * scale;
       }
 
-      const targetX = x !== undefined ? x * canvas.width : (canvas.width - targetW) / 2;
-      const targetY = y !== undefined ? y * canvas.height : (canvas.height - targetH) / 2;
+      const targetX = x !== undefined ? x * displayWidth : (displayWidth - targetW) / 2;
+      const targetY = y !== undefined ? y * displayHeight : (displayHeight - targetH) / 2;
 
       ctx.save();
       ctx.drawImage(img, targetX, targetY, targetW, targetH);
@@ -299,8 +302,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
                   image: dataUrl,
                   x: 0.25,
                   y: 0.25,
-                  width: canvasRef.current.width * 0.5,
-                  height: canvasRef.current.height * 0.5
+                  width: 0.5,
+                  height: 0.5
                 });
               }
             };
@@ -330,8 +333,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
             image: dataUrl,
             x: 0.25,
             y: 0.25,
-            width: canvasRef.current.width * 0.5,
-            height: canvasRef.current.height * 0.5
+            width: 0.5,
+            height: 0.5
           });
         }
       };
@@ -350,6 +353,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
       if (containerRef.current && canvas && ctx) {
         const oldWidth = canvas.width;
         const oldHeight = canvas.height;
+        const width = containerRef.current.clientWidth;
+        const height = containerRef.current.clientHeight;
+        const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
         let tempCanvas: HTMLCanvasElement | null = null;
 
         if (oldWidth > 0 && oldHeight > 0) {
@@ -362,26 +368,30 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
           }
         }
 
-        canvas.width = containerRef.current.clientWidth;
-        canvas.height = containerRef.current.clientHeight;
+        canvas.width = Math.max(1, Math.round(width * pixelRatio));
+        canvas.height = Math.max(1, Math.round(height * pixelRatio));
+        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 
         if (tempCanvas && tempCanvas.width > 0 && tempCanvas.height > 0) {
-          ctx.drawImage(tempCanvas, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(tempCanvas, 0, 0, oldWidth, oldHeight, 0, 0, width, height);
         }
       }
     };
     
     resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+    const resizeObserver = new ResizeObserver(resizeCanvas);
+    resizeObserver.observe(containerRef.current);
 
     // Socket Event Listeners
     const handleRemoteDraw = (data: DrawLine) => {
       if (!ctx || !canvas) return;
       const { prevX, prevY, currX, currY, color: remoteColor, width: remoteWidth, shape } = data;
-      const x1 = prevX * canvas.width;
-      const y1 = prevY * canvas.height;
-      const x2 = currX * canvas.width;
-      const y2 = currY * canvas.height;
+      const displayWidth = canvas.clientWidth || canvas.width;
+      const displayHeight = canvas.clientHeight || canvas.height;
+      const x1 = prevX * displayWidth;
+      const y1 = prevY * displayHeight;
+      const x2 = currX * displayWidth;
+      const y2 = currY * displayHeight;
 
       if (shape && shape !== 'pen' && shape !== 'eraser') {
         drawShape(ctx, shape, x1, y1, x2, y2, remoteColor, remoteWidth);
@@ -429,7 +439,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
     signaling.on('whiteboard-notes-update', handleRemoteNotes);
 
     return () => {
-      window.removeEventListener('resize', resizeCanvas);
+      resizeObserver.disconnect();
       signaling.off('whiteboard-draw', handleRemoteDraw);
       signaling.off('whiteboard-clear', handleClear);
       signaling.off('whiteboard-image', handleRemoteImage);
@@ -478,8 +488,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
     if (!ctx) return;
 
     const currentPos = getPos(e);
-    const width = canvasRef.current.width;
-    const height = canvasRef.current.height;
+      const width = canvasRef.current.clientWidth || canvasRef.current.width;
+      const height = canvasRef.current.clientHeight || canvasRef.current.height;
 
     if (tool === 'pen' || tool === 'eraser') {
       const isErasing = tool === 'eraser';
@@ -522,8 +532,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
 
     if (tool !== 'pen' && tool !== 'eraser' && startPos.current) {
       const currentPos = getPos(e);
-      const width = canvasRef.current.width;
-      const height = canvasRef.current.height;
+      const width = canvasRef.current.clientWidth || canvasRef.current.width;
+      const height = canvasRef.current.clientHeight || canvasRef.current.height;
 
       signaling.emit('whiteboard-draw', {
         roomId,
@@ -610,10 +620,20 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
     : "fixed top-16 bottom-24 inset-x-3 sm:inset-x-8 md:inset-x-16 max-w-4xl mx-auto z-40 bg-zinc-950/95 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200";
 
   return (
-    <div ref={containerRef} className={containerClasses}>
-      
+    <div className={containerClasses}>
+      <div className="h-12 shrink-0 flex items-center justify-between gap-3 px-4 border-b border-zinc-800 bg-zinc-900/80">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-white truncate">Collaborative whiteboard</h2>
+          <p className="text-[10px] text-zinc-500 truncate">Draw, add notes, and share ideas with everyone</p>
+        </div>
+        <span className="text-[10px] uppercase tracking-wider text-zinc-500 shrink-0">
+          {mode === 'stage' ? 'Docked' : 'Floating'}
+        </span>
+      </div>
+
+      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0">
       {/* Sleek Floating Glass Toolbar */}
-      <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-zinc-900/95 backdrop-blur-2xl border border-white/15 ring-1 ring-white/10 rounded-2xl p-1.5 sm:p-2 flex flex-wrap items-center gap-1 sm:gap-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.7)] z-30 max-w-[95%]">
+      <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-zinc-900/95 backdrop-blur-2xl border border-white/15 ring-1 ring-white/10 rounded-2xl p-1.5 sm:p-2 flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.7)] z-30 max-w-[calc(100%-1rem)]">
         
         {/* Tool Selector */}
         <div className="flex items-center gap-0.5 sm:gap-1 pr-1.5 border-r border-white/10">
@@ -823,6 +843,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
         onTouchMove={draw}
         className={`w-full h-full touch-none bg-transparent ${getCursorClass()}`}
       />
+      </div>
     </div>
   );
 };

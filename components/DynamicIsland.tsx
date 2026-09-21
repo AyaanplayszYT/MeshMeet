@@ -93,16 +93,16 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
 
   return (
     <div
-      className="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 flex justify-center"
+      className="fixed top-3 sm:top-4 left-1/2 transform -translate-x-1/2 z-50 flex justify-center max-w-[calc(100vw-1rem)] pointer-events-auto"
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
     >
       <div
         className={`
-          relative bg-zinc-950/80 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.6),inset_0_1px_1px_0_rgba(255,255,255,0.15)] rounded-full
+          relative max-w-[calc(100vw-1rem)] bg-zinc-950/80 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.6),inset_0_1px_1px_0_rgba(255,255,255,0.15)] rounded-full
           transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] overflow-hidden
           ${isExpanded 
-            ? 'w-[540px] h-[64px]' 
+            ? 'w-[min(540px,calc(100vw-1rem))] h-[64px]'
             : isRecording || handRaiseCount > 0
             ? 'w-[200px] h-[34px]' 
             : 'w-[130px] h-[32px]'
