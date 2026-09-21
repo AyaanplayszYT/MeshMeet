@@ -3,11 +3,28 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { signaling } from '../services/socket';
 import { ConnectionStats } from '../types';
+import { sound } from '../services/sound';
 
-const STUN_SERVERS = {
+const STUN_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' }
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.relay.metered.ca:80' },
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
 };
 
@@ -16,24 +33,44 @@ interface RoomConfig {
   name: string;
 }
 
-export const useWebRTC = (roomId: string, userId: string, userName: string, localStream: MediaStream | null, isScreenShare: boolean, config?: RoomConfig) => {
+export const useWebRTC = (
+  roomId: string, 
+  userId: string, 
+  userName: string, 
+  localStream: MediaStream | null, 
+  isScreenShare: boolean, 
+  isMuted: boolean = false,
+  isVideoStopped: boolean = false,
+  config?: RoomConfig
+) => {
   const [peers, setPeers] = useState<Map<string, RTCPeerConnection>>(new Map());
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
   const [connectionStats, setConnectionStats] = useState<Map<string, ConnectionStats>>(new Map());
   const [peerNames, setPeerNames] = useState<Map<string, string>>(new Map());
   const [peerScreenShares, setPeerScreenShares] = useState<Map<string, boolean>>(new Map());
+  const [peerMediaStates, setPeerMediaStates] = useState<Map<string, { isMuted: boolean; isVideoStopped: boolean }>>(new Map());
   
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const isScreenShareRef = useRef<boolean>(isScreenShare);
+  const isMutedRef = useRef<boolean>(isMuted);
+  const isVideoStoppedRef = useRef<boolean>(isVideoStopped);
   
   // Store previous stats to calculate deltas (loss percentage)
   const prevStatsRef = useRef<Map<string, { packetsLost: number, packetsReceived: number }>>(new Map());
 
-  // Update ref when isScreenShare changes
+  // Update refs when local media state changes
   useEffect(() => {
     isScreenShareRef.current = isScreenShare;
   }, [isScreenShare]);
+
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+    isVideoStoppedRef.current = isVideoStopped;
+    if (roomId && userId) {
+      signaling.emit('peer-media-state', { roomId, isMuted, isVideoStopped });
+    }
+  }, [roomId, userId, isMuted, isVideoStopped]);
 
   // Handle stream switching (e.g. Camera -> Screen Share)
   useEffect(() => {
@@ -193,6 +230,7 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
 
   const handleUserConnected = useCallback(async (newUserId: string) => {
     console.log('User connected:', newUserId);
+    sound.playJoinChime();
     const pc = createPeerConnection(newUserId, true);
     if (pc) {
         const offer = await pc.createOffer();
@@ -201,12 +239,14 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
             targetUserId: newUserId,
             userName: userName,
             isScreenShare: isScreenShareRef.current,
+            isMuted: isMutedRef.current,
+            isVideoStopped: isVideoStoppedRef.current,
             offer: offer
         });
     }
   }, [createPeerConnection, userName]);
 
-  const handleOffer = useCallback(async (callerId: string, callerName: string, isScreenShareRemote: boolean, offer: RTCSessionDescriptionInit) => {
+  const handleOffer = useCallback(async (callerId: string, callerName: string, isScreenShareRemote: boolean, offer: RTCSessionDescriptionInit, isMutedRemote?: boolean, isVideoStoppedRemote?: boolean) => {
     console.log(`Received offer from ${callerId} (${callerName})`);
     
     setPeerNames(prev => {
@@ -221,6 +261,14 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
         return newMap;
     });
 
+    if (isMutedRemote !== undefined || isVideoStoppedRemote !== undefined) {
+      setPeerMediaStates(prev => {
+        const newMap = new Map(prev);
+        newMap.set(callerId, { isMuted: !!isMutedRemote, isVideoStopped: !!isVideoStoppedRemote });
+        return newMap;
+      });
+    }
+
     const pc = createPeerConnection(callerId, false);
     if (pc) {
         // If we already have a connection, setRemoteDescription works for renegotiation too
@@ -231,12 +279,14 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
             targetUserId: callerId,
             userName: userName,
             isScreenShare: isScreenShareRef.current,
+            isMuted: isMutedRef.current,
+            isVideoStopped: isVideoStoppedRef.current,
             answer: answer
         });
     }
   }, [createPeerConnection, userName]);
 
-  const handleAnswer = useCallback(async (callerId: string, callerName: string, isScreenShareRemote: boolean, answer: RTCSessionDescriptionInit) => {
+  const handleAnswer = useCallback(async (callerId: string, callerName: string, isScreenShareRemote: boolean, answer: RTCSessionDescriptionInit, isMutedRemote?: boolean, isVideoStoppedRemote?: boolean) => {
     console.log(`Received answer from ${callerId} (${callerName})`);
     
     setPeerNames(prev => {
@@ -250,6 +300,14 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
         newMap.set(callerId, isScreenShareRemote);
         return newMap;
     });
+
+    if (isMutedRemote !== undefined || isVideoStoppedRemote !== undefined) {
+      setPeerMediaStates(prev => {
+        const newMap = new Map(prev);
+        newMap.set(callerId, { isMuted: !!isMutedRemote, isVideoStopped: !!isVideoStoppedRemote });
+        return newMap;
+      });
+    }
 
     const pc = peersRef.current.get(callerId);
     if (pc) {
@@ -270,6 +328,7 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
 
   const handleUserDisconnected = useCallback((disconnectedUserId: string) => {
     console.log('User disconnected:', disconnectedUserId);
+    sound.playLeaveChime();
     const pc = peersRef.current.get(disconnectedUserId);
     if (pc) {
         pc.close();
@@ -299,6 +358,12 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
             newMap.delete(disconnectedUserId);
             return newMap;
         });
+
+        setPeerMediaStates(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(disconnectedUserId);
+            return newMap;
+        });
         
         prevStatsRef.current.delete(disconnectedUserId);
     }
@@ -313,24 +378,42 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
 
     signaling.on('user-connected', (data: any) => {
         const targetId = typeof data === 'string' ? data : data.senderId;
-        if(targetId && targetId !== userId) handleUserConnected(targetId);
+        if(targetId && targetId !== userId) {
+          handleUserConnected(targetId);
+          // Broadcast our media state to newly connected peer
+          signaling.emit('peer-media-state', {
+            roomId,
+            isMuted: isMutedRef.current,
+            isVideoStopped: isVideoStoppedRef.current
+          });
+        }
     });
 
     signaling.on('offer', (payload: any) => {
         if (payload.targetUserId === userId || payload.targetUserId === 'all') {
-             handleOffer(payload.callerId, payload.userName, payload.isScreenShare, payload.offer);
+             handleOffer(payload.callerId, payload.userName, payload.isScreenShare, payload.offer, payload.isMuted, payload.isVideoStopped);
         }
     });
 
     signaling.on('answer', (payload: any) => {
         if (payload.targetUserId === userId) {
-            handleAnswer(payload.callerId, payload.userName, payload.isScreenShare, payload.answer);
+            handleAnswer(payload.callerId, payload.userName, payload.isScreenShare, payload.answer, payload.isMuted, payload.isVideoStopped);
         }
     });
 
     signaling.on('ice-candidate', (payload: any) => {
         if (payload.targetUserId === userId) {
             handleIceCandidate(payload.callerId, payload.candidate);
+        }
+    });
+
+    signaling.on('peer-media-state', (payload: { userId: string; isMuted: boolean; isVideoStopped: boolean }) => {
+        if (payload.userId && payload.userId !== userId) {
+            setPeerMediaStates(prev => {
+                const next = new Map(prev);
+                next.set(payload.userId, { isMuted: payload.isMuted, isVideoStopped: payload.isVideoStopped });
+                return next;
+            });
         }
     });
 
@@ -341,6 +424,7 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
       signaling.off('offer');
       signaling.off('answer');
       signaling.off('ice-candidate');
+      signaling.off('peer-media-state');
       signaling.off('user-disconnected');
       
       peersRef.current.forEach(pc => pc.close());
@@ -349,5 +433,5 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, loca
     };
   }, [roomId, userId, handleUserConnected, handleOffer, handleAnswer, handleIceCandidate, handleUserDisconnected]);
 
-  return { remoteStreams, connectionStats, peerNames, peerScreenShares };
+  return { remoteStreams, connectionStats, peerNames, peerScreenShares, peerMediaStates };
 };

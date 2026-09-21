@@ -41,6 +41,51 @@
         }
       }
     </script>
+    <style>
+      /* Custom sleek dark scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.16);
+        border-radius: 9999px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.32);
+      }
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+      }
+
+      /* Floating Emojis Animation */
+      @keyframes floatUp {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, 20px) scale(0.6);
+        }
+        15% {
+          opacity: 1;
+          transform: translate(-50%, -15px) scale(1.25);
+        }
+        75% {
+          opacity: 1;
+          transform: translate(calc(-50% + var(--drift, 0px)), -130px) scale(1.05);
+        }
+        100% {
+          opacity: 0;
+          transform: translate(calc(-50% + var(--drift, 0px)), -190px) scale(0.75);
+        }
+      }
+      .animate-float-up {
+        animation: floatUp 2.6s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+        will-change: transform, opacity;
+      }
+    </style>
   </head>
   <body class="bg-black text-zinc-100 font-sans antialiased selection:bg-zinc-700 selection:text-white">
     <div id="root" class="h-full"></div>

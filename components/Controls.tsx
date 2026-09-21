@@ -1,7 +1,22 @@
-
-
 import React, { useState } from 'react';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, MonitorUp, MessageSquare, Smile, Settings, PictureInPicture, PenTool, Aperture, Captions } from 'lucide-react';
+import { 
+  Mic, 
+  MicOff, 
+  Video, 
+  VideoOff, 
+  PhoneOff, 
+  MessageSquare, 
+  Share2, 
+  PenTool, 
+  Settings, 
+  PictureInPicture,
+  Aperture,
+  Captions,
+  MonitorUp,
+  Disc,
+  Square,
+  Smile
+} from 'lucide-react';
 
 interface ControlsProps {
   isMuted: boolean;
@@ -9,14 +24,21 @@ interface ControlsProps {
   isScreenSharing: boolean;
   isBlurEnabled: boolean;
   isCaptionsEnabled: boolean;
+  isHandRaised: boolean;
+  isRecording: boolean;
+  recordingDuration: number;
   showChat: boolean;
   showWhiteboard: boolean;
+  roomId: string;
   onToggleMute: () => void;
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
   onToggleBlur: () => void;
   onToggleCaptions: () => void;
   onTogglePiP: () => void;
+  onToggleRaiseHand: () => void;
+  onToggleRecord: () => void;
+  onCopyInvite: () => void;
   onToggleChat: () => void;
   onToggleWhiteboard: () => void;
   onOpenSettings: () => void;
@@ -24,12 +46,46 @@ interface ControlsProps {
   onReaction: (emoji: string) => void;
 }
 
-const Controls: React.FC<ControlsProps> = ({
+const ControlButton: React.FC<{
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  danger?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}> = ({ label, onClick, active, danger, className = '', children }) => (
+  <div className="group/dock relative flex items-center justify-center">
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className={`p-3 rounded-2xl transition-all duration-200 transform active:scale-95 flex items-center justify-center ${
+        active 
+          ? 'bg-white text-black shadow-lg shadow-white/20 border border-white'
+          : danger
+          ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 shadow-lg shadow-rose-500/10'
+          : 'bg-white/[0.06] text-zinc-300 hover:bg-white/[0.14] hover:text-white border border-white/10 hover:border-white/20 backdrop-blur-md'
+      } ${className}`}
+    >
+      {children}
+    </button>
+    
+    {/* Floating Glass Tooltip */}
+    <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2.5 py-1 bg-zinc-900/95 backdrop-blur-xl text-white text-[11px] font-medium rounded-xl border border-white/15 shadow-2xl opacity-0 group-hover/dock:opacity-100 transition-all duration-150 pointer-events-none whitespace-nowrap z-50 transform group-hover/dock:-translate-y-0.5">
+      {label}
+    </div>
+  </div>
+);
+
+export const Controls: React.FC<ControlsProps> = ({
   isMuted,
   isVideoStopped,
   isScreenSharing,
   isBlurEnabled,
   isCaptionsEnabled,
+  isHandRaised,
+  isRecording,
+  recordingDuration,
   showChat,
   showWhiteboard,
   onToggleMute,
@@ -38,6 +94,9 @@ const Controls: React.FC<ControlsProps> = ({
   onToggleBlur,
   onToggleCaptions,
   onTogglePiP,
+  onToggleRaiseHand,
+  onToggleRecord,
+  onCopyInvite,
   onToggleChat,
   onToggleWhiteboard,
   onOpenSettings,
@@ -46,122 +105,173 @@ const Controls: React.FC<ControlsProps> = ({
 }) => {
   const [showReactions, setShowReactions] = useState(false);
 
-  const buttonBase = "p-3.5 rounded-2xl transition-all duration-200 transform active:scale-95 flex items-center justify-center relative";
-  const buttonNormal = "bg-white/[0.06] text-zinc-200 hover:bg-white/[0.12] hover:text-white border border-white/10 hover:border-white/20 backdrop-blur-md";
-  const buttonActive = "bg-white text-black shadow-lg shadow-white/20 border border-white";
-  const buttonDanger = "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 shadow-lg shadow-rose-500/10";
-  
   const handleReaction = (emoji: string) => {
     onReaction(emoji);
     setShowReactions(false);
   };
 
+  const formatTime = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 z-50">
+    <div className="fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center gap-3 z-50">
       
       {/* Reaction Popover */}
       {showReactions && (
-          <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-zinc-950/80 backdrop-blur-2xl border border-white/15 ring-1 ring-white/10 rounded-2xl p-2 flex gap-2 shadow-2xl animate-in slide-in-from-bottom-5 fade-in duration-200">
-              <button onClick={() => handleReaction('❤️')} className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-colors">❤️</button>
-              <button onClick={() => handleReaction('👍')} className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-colors">👍</button>
-              <button onClick={() => handleReaction('😂')} className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-colors">😂</button>
-              <button onClick={() => handleReaction('🎉')} className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-colors">🎉</button>
-          </div>
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-zinc-950/90 backdrop-blur-2xl border border-white/15 ring-1 ring-white/10 rounded-2xl p-2 flex gap-2 shadow-2xl animate-in slide-in-from-bottom-4 fade-in duration-150">
+          {['❤️', '👍', '😂', '🎉', '🔥', '👏'].map((emoji) => (
+            <button 
+              key={emoji}
+              type="button"
+              onClick={() => handleReaction(emoji)} 
+              className="p-2 hover:bg-white/10 rounded-xl text-2xl transition-transform hover:scale-125 select-none"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
       )}
 
-      <div className="flex items-center gap-2 bg-zinc-950/60 backdrop-blur-3xl p-2 sm:p-2.5 rounded-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.6),inset_0_1px_1px_0_rgba(255,255,255,0.15)]">
+      {/* Main Glass Control Dock */}
+      <div className="flex items-center gap-1.5 sm:gap-2 bg-zinc-950/75 backdrop-blur-3xl p-2 sm:p-2.5 rounded-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.7),inset_0_1px_1px_0_rgba(255,255,255,0.15)]">
         
-        <button
+        {/* Mute Mic */}
+        <ControlButton
+          label={isMuted ? "Unmute Microphone" : "Mute Microphone"}
           onClick={onToggleMute}
-          className={`${buttonBase} ${isMuted ? buttonDanger : buttonNormal}`}
-          title={isMuted ? "Unmute" : "Mute"}
+          danger={isMuted}
         >
           {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
+        </ControlButton>
 
-        <button
+        {/* Video Camera */}
+        <ControlButton
+          label={isVideoStopped ? "Turn Camera On" : "Turn Camera Off"}
           onClick={onToggleVideo}
-          className={`${buttonBase} ${isVideoStopped ? buttonDanger : buttonNormal}`}
-          title={isVideoStopped ? "Start Video" : "Stop Video"}
+          danger={isVideoStopped}
         >
           {isVideoStopped ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-        </button>
+        </ControlButton>
 
-        <button
-            onClick={onToggleScreenShare}
-            className={`${buttonBase} ${isScreenSharing ? 'bg-green-500/10 text-green-400 border-green-500/20' : buttonNormal}`}
-            title="Share Screen"
+        {/* Screen Share */}
+        <ControlButton
+          label={isScreenSharing ? "Stop Sharing Screen" : "Share Your Screen"}
+          onClick={onToggleScreenShare}
+          active={isScreenSharing}
         >
-            <MonitorUp className="w-5 h-5" />
-        </button>
+          <MonitorUp className="w-5 h-5" />
+        </ControlButton>
 
-        <button
-            onClick={onToggleBlur}
-            className={`${buttonBase} ${isBlurEnabled ? buttonActive : buttonNormal}`}
-            title="Blur Background"
+        {/* Raise Hand */}
+        <ControlButton
+          label={isHandRaised ? "Lower Your Hand" : "Raise Hand"}
+          onClick={onToggleRaiseHand}
+          className={isHandRaised ? "bg-amber-500 text-black font-bold shadow-lg shadow-amber-500/30" : ""}
         >
-            <Aperture className="w-5 h-5" />
-        </button>
+          <span className="text-base leading-none">✋</span>
+        </ControlButton>
 
-        <button
-            onClick={onToggleCaptions}
-            className={`${buttonBase} ${isCaptionsEnabled ? buttonActive : buttonNormal}`}
-            title="Live Captions"
+        {/* Local Meeting Recording */}
+        <ControlButton
+          label={isRecording ? "Stop & Save Recording" : "Record Meeting Locally"}
+          onClick={onToggleRecord}
+          className={isRecording ? "bg-rose-600 text-white font-bold shadow-lg shadow-rose-600/40 animate-pulse px-3.5" : ""}
         >
-            <Captions className="w-5 h-5" />
-        </button>
+          {isRecording ? (
+            <div className="flex items-center gap-1.5">
+              <Square className="w-4 h-4 fill-current" />
+              <span className="text-xs font-mono">{formatTime(recordingDuration)}</span>
+            </div>
+          ) : (
+            <Disc className="w-5 h-5" />
+          )}
+        </ControlButton>
+
+        {/* Background Blur */}
+        <ControlButton
+          label={isBlurEnabled ? "Remove Background Blur" : "Virtual Background Blur"}
+          onClick={onToggleBlur}
+          active={isBlurEnabled}
+        >
+          <Aperture className="w-5 h-5" />
+        </ControlButton>
+
+        {/* Live Captions */}
+        <ControlButton
+          label={isCaptionsEnabled ? "Turn Off Live Captions" : "Live AI Captions"}
+          onClick={onToggleCaptions}
+          active={isCaptionsEnabled}
+        >
+          <Captions className="w-5 h-5" />
+        </ControlButton>
+
+        {/* Copy Invite Link */}
+        <ControlButton
+          label="Copy 1-Click Invite Link"
+          onClick={onCopyInvite}
+        >
+          <Share2 className="w-5 h-5" />
+        </ControlButton>
         
-        <button
-            onClick={onOpenSettings}
-            className={`${buttonBase} ${buttonNormal}`}
-            title="Settings"
+        {/* Device Settings */}
+        <ControlButton
+          label="Audio & Video Settings"
+          onClick={onOpenSettings}
         >
-            <Settings className="w-5 h-5" />
-        </button>
+          <Settings className="w-5 h-5" />
+        </ControlButton>
 
-        <button
-            onClick={onTogglePiP}
-            className={`${buttonBase} ${buttonNormal}`}
-            title="Picture in Picture"
+        {/* Picture in Picture */}
+        <ControlButton
+          label="Picture in Picture (Floating Window)"
+          onClick={onTogglePiP}
         >
-            <PictureInPicture className="w-5 h-5" />
-        </button>
+          <PictureInPicture className="w-5 h-5" />
+        </ControlButton>
 
-        <div className="w-px h-8 bg-zinc-800 mx-2"></div>
+        <div className="w-px h-7 bg-white/10 mx-0.5 hidden sm:block" />
 
-        <button
-            onClick={onToggleWhiteboard}
-            className={`${buttonBase} ${showWhiteboard ? buttonActive : buttonNormal}`}
-            title="Whiteboard"
+        {/* Whiteboard */}
+        <ControlButton
+          label={showWhiteboard ? "Close Whiteboard" : "Collaborative Whiteboard"}
+          onClick={onToggleWhiteboard}
+          active={showWhiteboard}
         >
-            <PenTool className="w-5 h-5" />
-        </button>
+          <PenTool className="w-5 h-5" />
+        </ControlButton>
 
-        <button
-            onClick={() => setShowReactions(!showReactions)}
-            className={`${buttonBase} ${showReactions ? buttonActive : buttonNormal}`}
-            title="Reactions"
+        {/* Reactions */}
+        <ControlButton
+          label="Floating Emoji Reactions"
+          onClick={() => setShowReactions(!showReactions)}
+          active={showReactions}
         >
-            <Smile className="w-5 h-5" />
-        </button>
+          <Smile className="w-5 h-5" />
+        </ControlButton>
 
-        <button
-            onClick={onToggleChat}
-            className={`${buttonBase} ${showChat ? buttonActive : buttonNormal}`}
-            title="Chat"
+        {/* Chat */}
+        <ControlButton
+          label={showChat ? "Close Chat" : "Meeting Chat"}
+          onClick={onToggleChat}
+          active={showChat}
         >
-            <MessageSquare className="w-5 h-5" />
-        </button>
+          <MessageSquare className="w-5 h-5" />
+        </ControlButton>
 
-        <div className="w-px h-8 bg-zinc-800 mx-2"></div>
+        <div className="w-px h-7 bg-white/10 mx-0.5" />
 
-        <button
+        {/* Leave Call */}
+        <ControlButton
+          label="Leave Meeting"
           onClick={onLeave}
-          className={`${buttonBase} bg-red-600 hover:bg-red-500 text-white border-none w-14`}
-          title="Leave Call"
+          className="bg-rose-600 hover:bg-rose-500 text-white border-none w-12 sm:w-14 shadow-lg shadow-rose-600/30"
         >
           <PhoneOff className="w-5 h-5" />
-        </button>
+        </ControlButton>
+
       </div>
     </div>
   );

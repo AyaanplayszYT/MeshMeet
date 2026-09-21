@@ -3,6 +3,8 @@ import { Video, Plus, ArrowRight, Loader2, Sparkles, Keyboard, ShieldCheck, Mic,
 import { useWebRTC } from './hooks/useWebRTC';
 import { useBackgroundBlur } from './hooks/useBackgroundBlur';
 import { useLiveCaptions } from './hooks/useLiveCaptions';
+import { useMeetingRecorder } from './hooks/useMeetingRecorder';
+import { sound } from './services/sound';
 import VideoGrid from './components/VideoGrid';
 import Controls from './components/Controls';
 import DynamicIsland from './components/DynamicIsland';
@@ -36,6 +38,11 @@ const App = () => {
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({ isLocked: false, waitingRoom: false });
   const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
   const [showHostControls, setShowHostControls] = useState(false);
+
+  // Hand Raise & Recording State
+  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   
   // Media State
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -49,16 +56,39 @@ const App = () => {
   // Live Captions Hook
   const { captions, isCaptionsEnabled, toggleCaptions } = useLiveCaptions(roomId, userId);
 
+  // Meeting Recording Hook (100% Client-side MediaRecorder)
+  const { isRecording, duration: recordingDuration, startRecording, stopRecording } = useMeetingRecorder();
+
   // UI State
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showWhiteboard, setShowWhiteboard] = useState(false);
+  const [whiteboardMode, setWhiteboardMode] = useState<'stage' | 'popup'>('popup');
+  const [activeReactions, setActiveReactions] = useState<{ id: string; emoji: string; left: number; drift: number }[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [publicRooms, setPublicRooms] = useState<RoomInfo[]>([]);
 
   // Preview Video Ref
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((cur) => (cur === msg ? null : cur));
+    }, 3000);
+  };
+
+  // 1-Click invite link detection in URL query string (?room=... or ?r=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get('room') || params.get('r');
+    if (roomParam) {
+      setRoomId(roomParam.trim());
+      setMode('join');
+      showToast(`Invited to join room #${roomParam.trim()}`);
+    }
+  }, []);
 
   useEffect(() => {
     const newUserId = generateId();
@@ -127,6 +157,44 @@ const App = () => {
       setError('The room has been closed by the host.');
       setMode('home');
     });
+
+    // Hand raise synchronization
+    signaling.on('hand-raise-update', (payload: { userId: string; isRaised: boolean; userName: string }) => {
+      setRaisedHands((prev) => {
+        const next = new Set(prev);
+        if (payload.isRaised) {
+          next.add(payload.userId);
+          sound.playHandRaiseChime();
+          showToast(`✋ ${payload.userName || 'A participant'} raised their hand`);
+        } else {
+          next.delete(payload.userId);
+        }
+        return next;
+      });
+    });
+    
+    // Floating Emojis synchronization
+    const triggerFloatingReaction = (emoji: string) => {
+      if (!emoji) return;
+      const id = `${Date.now()}-${Math.random()}`;
+      const left = 20 + Math.random() * 60;
+      const drift = (Math.random() - 0.5) * 80;
+      setActiveReactions((prev) => [...prev.slice(-12), { id, emoji, left, drift }]);
+      setTimeout(() => {
+        setActiveReactions((prev) => prev.filter((r) => r.id !== id));
+      }, 2600);
+    };
+
+    const handleReactionEvent = (reaction: Reaction) => {
+      triggerFloatingReaction(reaction.emoji);
+    };
+
+    const handleLocalReactionEvent = (e: any) => {
+      triggerFloatingReaction(e.detail?.emoji);
+    };
+
+    signaling.on('reaction', handleReactionEvent);
+    window.addEventListener('local-reaction' as any, handleLocalReactionEvent);
     
     // Periodic refresh of rooms
     const interval = setInterval(() => {
@@ -148,6 +216,9 @@ const App = () => {
       signaling.off('room-settings-update');
       signaling.off('host-changed');
       signaling.off('room-closed');
+      signaling.off('hand-raise-update');
+      signaling.off('reaction', handleReactionEvent);
+      window.removeEventListener('local-reaction' as any, handleLocalReactionEvent);
       clearInterval(interval);
     };
   }, []);
@@ -226,11 +297,21 @@ const App = () => {
   
   // Host controls
   const handleAdmitUser = (odId: string) => {
+    setWaitingUsers(prev => prev.filter(u => u.odId !== odId));
     signaling.emit('admit-user', { roomId, odId });
   };
   
   const handleDenyUser = (odId: string) => {
+    setWaitingUsers(prev => prev.filter(u => u.odId !== odId));
     signaling.emit('deny-user', { roomId, odId });
+  };
+
+  const handleAdmitAll = () => {
+    const list = [...waitingUsers];
+    setWaitingUsers([]);
+    list.forEach(u => {
+      signaling.emit('admit-user', { roomId, odId: u.odId });
+    });
   };
   
   const handleToggleLock = () => {
@@ -256,12 +337,14 @@ const App = () => {
   }, [screenStream, finalStream, localStream]);
 
   const roomConfig = { isPublic, name: roomName, waitingRoom: waitingRoomEnabled };
-  const { remoteStreams, connectionStats, peerNames, peerScreenShares } = useWebRTC(
+  const { remoteStreams, connectionStats, peerNames, peerScreenShares, peerMediaStates } = useWebRTC(
       mode === 'room' ? roomId : '', 
       userId, 
       username, 
       activeStream, 
       !!screenStream, 
+      isMuted,
+      isVideoStopped,
       roomConfig
   );
 
@@ -349,7 +432,54 @@ const App = () => {
       }));
   };
 
+  const handleToggleRaiseHand = () => {
+    const nextState = !isHandRaised;
+    setIsHandRaised(nextState);
+    if (nextState) sound.playHandRaiseChime();
+    signaling.emit('raise-hand', {
+      roomId,
+      userId,
+      isRaised: nextState,
+      userName: username
+    });
+    setRaisedHands(prev => {
+      const next = new Set(prev);
+      if (nextState) next.add(userId);
+      else next.delete(userId);
+      return next;
+    });
+  };
+
+  const handleToggleRecord = async () => {
+    if (isRecording) {
+      stopRecording();
+      showToast('Meeting recording saved and downloaded (.webm)');
+    } else {
+      const started = await startRecording(activeStream);
+      if (started) {
+        showToast('Local meeting recording started');
+      } else {
+        showToast('Screen/Meeting capture cancelled or not allowed');
+      }
+    }
+  };
+
+  const handleCopyInvite = () => {
+    const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    navigator.clipboard.writeText(inviteUrl);
+    showToast('🔗 Invite link copied to clipboard!');
+  };
+
   const leaveRoom = () => {
+    if (isRecording) {
+      stopRecording();
+    }
+    if (isHandRaised) {
+      signaling.emit('raise-hand', { roomId, userId, isRaised: false, userName: username });
+      setIsHandRaised(false);
+    }
+    setRaisedHands(new Set());
+
     if (roomId && userId) {
       signaling.emit('leave-room', { roomId, userId });
     }
@@ -434,11 +564,22 @@ const App = () => {
   if (mode === 'room') {
     return (
       <div className="h-screen w-full flex flex-col relative overflow-hidden bg-black text-white font-sans">
+        {/* Floating Toast Notification */}
+        {toastMessage && (
+          <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-zinc-900/90 backdrop-blur-2xl border border-white/20 text-white text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-3 fade-in duration-200">
+            <span>{toastMessage}</span>
+          </div>
+        )}
+
         <DynamicIsland 
           roomId={roomId}
           participantCount={(1) + remoteStreams.size}
           isMuted={isMuted}
           isVideoStopped={isVideoStopped}
+          isRecording={isRecording}
+          recordingDuration={recordingDuration}
+          handRaiseCount={raisedHands.size}
+          onCopyInvite={handleCopyInvite}
         />
         
         {/* Host Controls Button */}
@@ -471,49 +612,114 @@ const App = () => {
           onToggleWaitingRoom={handleToggleWaitingRoom}
           onAdmitUser={handleAdmitUser}
           onDenyUser={handleDenyUser}
+          onAdmitAll={handleAdmitAll}
         />
 
         <main className="flex-1 w-full h-full relative z-10 flex flex-col pt-16 sm:pt-20 pb-24 sm:pb-28 px-2 sm:px-4 min-h-0 overflow-hidden">
-           {activeStream ? (
-             <VideoGrid 
-                localStream={activeStream} 
-                remoteStreams={remoteStreams} 
-                myUserId={userId}
-                myUserName={username}
-                peerNames={peerNames}
-                connectionStats={connectionStats}
-                captions={captions}
-                peerScreenShares={peerScreenShares}
-                isLocalScreenShare={!!screenStream}
-             />
-           ) : (
-             <div className="flex items-center justify-center w-full h-full">
-                <Loader2 className="w-12 h-12 animate-spin text-zinc-700" />
-             </div>
-           )}
+          {/* Dual Whiteboard & Video Grid Stage Mode */}
+          {showWhiteboard && whiteboardMode === 'stage' ? (
+            <div className="w-full h-full flex flex-col lg:flex-row gap-3 min-h-0 overflow-hidden">
+              {/* Central Whiteboard Canvas Stage */}
+              <div className="flex-1 h-full min-h-0 min-w-0 relative">
+                <Whiteboard 
+                  isOpen={true}
+                  onClose={() => setShowWhiteboard(false)}
+                  roomId={roomId}
+                  mode="stage"
+                  onToggleMode={() => setWhiteboardMode('popup')}
+                  currentUserName={username}
+                />
+              </div>
 
-           <Chat 
-             isOpen={showChat} 
-             onClose={() => setShowChat(false)} 
-             roomId={roomId} 
-             userId={userId} 
-             myUserName={username}
-             peerNames={peerNames}
-            />
+              {/* Side Participant Video strip */}
+              <div className="h-36 sm:h-44 lg:h-full lg:w-72 xl:w-80 shrink-0 min-h-0 overflow-y-auto overflow-x-auto bg-zinc-950/40 backdrop-blur-xl rounded-3xl p-2 border border-white/10 flex items-center justify-center">
+                {activeStream && (
+                  <VideoGrid 
+                    localStream={activeStream} 
+                    remoteStreams={remoteStreams} 
+                    myUserId={userId}
+                    myUserName={username}
+                    peerNames={peerNames}
+                    connectionStats={connectionStats}
+                    captions={captions}
+                    peerScreenShares={peerScreenShares}
+                    isLocalScreenShare={!!screenStream}
+                    raisedHands={raisedHands}
+                    localIsMuted={isMuted}
+                    localIsVideoStopped={isVideoStopped}
+                    peerMediaStates={peerMediaStates}
+                  />
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {activeStream ? (
+                <VideoGrid 
+                  localStream={activeStream} 
+                  remoteStreams={remoteStreams} 
+                  myUserId={userId}
+                  myUserName={username}
+                  peerNames={peerNames}
+                  connectionStats={connectionStats}
+                  captions={captions}
+                  peerScreenShares={peerScreenShares}
+                  isLocalScreenShare={!!screenStream}
+                  raisedHands={raisedHands}
+                  localIsMuted={isMuted}
+                  localIsVideoStopped={isVideoStopped}
+                  peerMediaStates={peerMediaStates}
+                />
+              ) : (
+                <div className="flex items-center justify-center w-full h-full">
+                  <Loader2 className="w-12 h-12 animate-spin text-zinc-700" />
+                </div>
+              )}
 
-            <Whiteboard 
-              isOpen={showWhiteboard}
-              onClose={() => setShowWhiteboard(false)}
-              roomId={roomId}
-            />
-            
-            <SettingsModal 
-                isOpen={showSettings}
-                onClose={() => setShowSettings(false)}
-                currentCameraId={localStream?.getVideoTracks()[0]?.getSettings().deviceId}
-                currentMicId={localStream?.getAudioTracks()[0]?.getSettings().deviceId}
-                onDeviceChange={switchMediaDevice}
-            />
+              {/* Popup Floating Whiteboard Mode */}
+              <Whiteboard 
+                isOpen={showWhiteboard && whiteboardMode === 'popup'}
+                onClose={() => setShowWhiteboard(false)}
+                roomId={roomId}
+                mode="popup"
+                onToggleMode={() => setWhiteboardMode('stage')}
+                currentUserName={username}
+              />
+            </>
+          )}
+
+          {/* Room-wide Floating Emoji Reactions */}
+          <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+            {activeReactions.map((r) => (
+              <div
+                key={r.id}
+                style={{
+                  left: `${r.left}%`,
+                  ['--drift' as any]: `${r.drift}px`
+                }}
+                className="absolute bottom-28 text-5xl sm:text-6xl animate-float-up pointer-events-none select-none drop-shadow-2xl"
+              >
+                {r.emoji}
+              </div>
+            ))}
+          </div>
+
+          <Chat 
+            isOpen={showChat} 
+            onClose={() => setShowChat(false)} 
+            roomId={roomId} 
+            userId={userId} 
+            myUserName={username}
+            peerNames={peerNames}
+          />
+          
+          <SettingsModal 
+            isOpen={showSettings}
+            onClose={() => setShowSettings(false)}
+            currentCameraId={localStream?.getVideoTracks()[0]?.getSettings().deviceId}
+            currentMicId={localStream?.getAudioTracks()[0]?.getSettings().deviceId}
+            onDeviceChange={switchMediaDevice}
+          />
         </main>
 
         <Controls
@@ -522,14 +728,21 @@ const App = () => {
           isScreenSharing={!!screenStream}
           isBlurEnabled={isBlurEnabled}
           isCaptionsEnabled={isCaptionsEnabled}
+          isHandRaised={isHandRaised}
+          isRecording={isRecording}
+          recordingDuration={recordingDuration}
           showChat={showChat}
           showWhiteboard={showWhiteboard}
+          roomId={roomId}
           onToggleMute={toggleMute}
           onToggleVideo={toggleVideo}
           onToggleScreenShare={toggleScreenShare}
           onToggleBlur={toggleBlur}
           onToggleCaptions={toggleCaptions}
           onTogglePiP={togglePiP}
+          onToggleRaiseHand={handleToggleRaiseHand}
+          onToggleRecord={handleToggleRecord}
+          onCopyInvite={handleCopyInvite}
           onToggleChat={() => setShowChat(!showChat)}
           onToggleWhiteboard={() => setShowWhiteboard(!showWhiteboard)}
           onOpenSettings={() => setShowSettings(true)}
@@ -544,7 +757,7 @@ const App = () => {
   if (mode === 'preview') {
       return (
         <div className="min-h-screen bg-black flex items-center justify-center p-4">
-             <div className="w-full max-w-2xl bg-zinc-900/50 backdrop-blur-3xl border border-zinc-800 rounded-[32px] p-8 shadow-2xl space-y-8 animate-float">
+             <div className="w-full max-w-2xl bg-zinc-900/50 backdrop-blur-3xl border border-zinc-800 rounded-[32px] p-8 shadow-2xl space-y-8">
                 <div className="text-center space-y-2">
                     <h2 className="text-2xl font-bold text-white tracking-tight">Ready to join, {username}?</h2>
                     <p className="text-zinc-500">
@@ -616,11 +829,18 @@ const App = () => {
       {/* Top Navigation Bar */}
       <Navbar isConnected={isConnected} onRefreshRooms={handleRefreshRooms} />
 
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-zinc-900/90 backdrop-blur-2xl border border-white/20 text-white text-xs font-semibold shadow-2xl flex items-center gap-2 animate-in slide-in-from-top-3 fade-in duration-200">
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Main Content Area */}
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-12 relative z-10 space-y-16">
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 pt-28 sm:pt-36 relative z-10 space-y-16">
         
         {/* Hero Section */}
-        <section className="text-center space-y-4 max-w-2xl mx-auto pt-4">
+        <section className="text-center space-y-4 max-w-2xl mx-auto pt-2 sm:pt-4">
           <div className="space-y-3">
             <h1 className="text-5xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white via-zinc-200 to-zinc-500">
                 MeshMeet

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Send, X, MessageSquare, ChevronRight } from 'lucide-react';
 import { signaling } from '../services/socket';
 import { ChatMessage } from '../types';
+import { sound } from '../services/sound';
 
 interface ChatProps {
   isOpen: boolean;
@@ -23,12 +24,15 @@ const Chat: React.FC<ChatProps> = ({ isOpen, onClose, roomId, userId, peerNames,
     // Listen for incoming messages
     signaling.on('chat-message', (msg: ChatMessage) => {
       setMessages((prev) => [...prev, msg]);
+      if (msg.senderId !== userId) {
+        sound.playMessagePop();
+      }
     });
 
     return () => {
       signaling.off('chat-message');
     };
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     if (isOpen) {
@@ -89,7 +93,7 @@ const Chat: React.FC<ChatProps> = ({ isOpen, onClose, roomId, userId, peerNames,
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 overscroll-contain pr-4 select-text">
         {messages.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-center space-y-3 opacity-50">
                 <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800">

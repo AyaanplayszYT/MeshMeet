@@ -292,8 +292,10 @@ io.on('connection', (socket: Socket) => {
     const { roomId, odId } = payload;
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(roomId);
+    const roomUsers = rooms.get(roomId);
 
-    if (meta?.hostId !== hostUserId) {
+    const isAuthorized = !meta || !meta.hostId || meta.hostId === hostUserId || (hostUserId && roomUsers && roomUsers.has(hostUserId));
+    if (!isAuthorized) {
       console.warn(`[Room ${roomId}] Unauthorized admit request from ${hostUserId}`);
       return;
     }
@@ -309,7 +311,6 @@ io.on('connection', (socket: Socket) => {
         targetSocket.join(roomId);
         userToRoom.set(odId, roomId);
 
-        const roomUsers = rooms.get(roomId);
         if (roomUsers) {
           targetSocket.to(roomId).emit('user-connected', odId);
           roomUsers.add(odId);
@@ -324,10 +325,13 @@ io.on('connection', (socket: Socket) => {
         console.log(`[Room ${roomId}] User ${odId} admitted by host`);
       }
 
-      socket.emit('waiting-room-update', {
+      const updatedPayload = {
         roomId,
         waitingUsers: Array.from(waiting.values()).map(u => ({ odId: u.odId, userName: u.userName }))
-      });
+      };
+      // Broadcast to host socket and entire room
+      socket.emit('waiting-room-update', updatedPayload);
+      io.to(roomId).emit('waiting-room-update', updatedPayload);
 
       broadcastPublicRooms();
     }
@@ -338,8 +342,10 @@ io.on('connection', (socket: Socket) => {
     const { roomId, odId } = payload;
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(roomId);
+    const roomUsers = rooms.get(roomId);
 
-    if (!meta || meta.hostId !== hostUserId) return;
+    const isAuthorized = !meta || !meta.hostId || meta.hostId === hostUserId || (hostUserId && roomUsers && roomUsers.has(hostUserId));
+    if (!isAuthorized) return;
 
     const waiting = waitingRooms.get(roomId);
     const waitingUser = waiting?.get(odId);
@@ -352,10 +358,12 @@ io.on('connection', (socket: Socket) => {
         socketToUser.delete(waitingUser.socketId);
       }
 
-      socket.emit('waiting-room-update', {
+      const updatedPayload = {
         roomId,
         waitingUsers: Array.from(waiting.values()).map(u => ({ odId: u.odId, userName: u.userName }))
-      });
+      };
+      socket.emit('waiting-room-update', updatedPayload);
+      io.to(roomId).emit('waiting-room-update', updatedPayload);
       console.log(`[Room ${roomId}] User ${odId} denied by host`);
     }
   });
@@ -396,6 +404,8 @@ io.on('connection', (socket: Socket) => {
         callerId: socketToUser.get(socket.id),
         userName: payload.userName,
         isScreenShare: payload.isScreenShare,
+        isMuted: payload.isMuted,
+        isVideoStopped: payload.isVideoStopped,
         offer: payload.offer,
         targetUserId: payload.targetUserId
       });
@@ -410,6 +420,8 @@ io.on('connection', (socket: Socket) => {
         callerId: socketToUser.get(socket.id),
         userName: payload.userName,
         isScreenShare: payload.isScreenShare,
+        isMuted: payload.isMuted,
+        isVideoStopped: payload.isVideoStopped,
         answer: payload.answer,
         targetUserId: payload.targetUserId
       });
@@ -450,6 +462,31 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('whiteboard-clear', (payload) => {
     socket.to(payload.roomId).emit('whiteboard-clear');
+  });
+
+  socket.on('whiteboard-image', (payload: { roomId: string; image: string; x: number; y: number; width: number; height: number }) => {
+    socket.to(payload.roomId).emit('whiteboard-image', payload);
+  });
+
+  socket.on('whiteboard-notes-update', (payload: { roomId: string; notes: any[] }) => {
+    socket.to(payload.roomId).emit('whiteboard-notes-update', payload.notes);
+  });
+
+  // Raise Hand event
+  socket.on('raise-hand', (payload: { roomId: string; userId: string; isRaised: boolean; userName: string }) => {
+    socket.to(payload.roomId).emit('hand-raise-update', payload);
+  });
+
+  // Peer Media State (Mute & Camera on/off synchronization)
+  socket.on('peer-media-state', (payload: { roomId: string; isMuted: boolean; isVideoStopped: boolean }) => {
+    const senderUserId = socketToUser.get(socket.id);
+    if (senderUserId && payload.roomId) {
+      socket.to(payload.roomId).emit('peer-media-state', {
+        userId: senderUserId,
+        isMuted: payload.isMuted,
+        isVideoStopped: payload.isVideoStopped
+      });
+    }
   });
 
   // Handle explicit leave room
