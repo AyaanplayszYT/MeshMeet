@@ -430,7 +430,9 @@ const App = () => {
           setScreenStream(null);
       } else {
           try {
-              const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+              // Keep microphone audio from the local stream; display audio is optional and
+              // causes capture to fail in browsers that do not support system-audio sharing.
+              const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
               setScreenStream(stream);
               stream.getVideoTracks()[0].onended = () => {
                   setScreenStream(null);

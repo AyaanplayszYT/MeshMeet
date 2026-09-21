@@ -523,6 +523,16 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
+  socket.on('screen-share-state', (payload: { roomId: string; isScreenShare: boolean }) => {
+    const senderUserId = socketToUser.get(socket.id);
+    if (senderUserId && payload.roomId) {
+      socket.to(payload.roomId).emit('screen-share-state', {
+        userId: senderUserId,
+        isScreenShare: payload.isScreenShare
+      });
+    }
+  });
+
   // Handle explicit leave room
   socket.on('leave-room', (payload: { roomId: string; userId: string }) => {
     const { roomId, userId } = payload;

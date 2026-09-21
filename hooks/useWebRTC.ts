@@ -62,7 +62,10 @@ export const useWebRTC = (
   // Update refs when local media state changes
   useEffect(() => {
     isScreenShareRef.current = isScreenShare;
-  }, [isScreenShare]);
+    if (roomId && userId) {
+      signaling.emit('screen-share-state', { roomId, isScreenShare });
+    }
+  }, [roomId, userId, isScreenShare]);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -99,18 +102,6 @@ export const useWebRTC = (
                 }
             }
             
-            // Re-negotiate metadata (resolution/type) if needed by sending a new offer (optional, but handled via signaling here)
-            // For simple switching, we just replace track. The peer will see resolution change naturally.
-            // But we want to update the "isScreenShare" status on peer side.
-            // We can re-offer
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            signaling.emit('offer', {
-                targetUserId: peerId,
-                userName: userName,
-                isScreenShare: isScreenShare,
-                offer: offer
-            });
         });
     }
     localStreamRef.current = localStream;
@@ -417,6 +408,16 @@ export const useWebRTC = (
         }
     });
 
+    signaling.on('screen-share-state', (payload: { userId: string; isScreenShare: boolean }) => {
+        if (payload.userId && payload.userId !== userId) {
+          setPeerScreenShares(prev => {
+            const next = new Map(prev);
+            next.set(payload.userId, payload.isScreenShare);
+            return next;
+          });
+        }
+    });
+
     signaling.on('user-disconnected', (id: string) => handleUserDisconnected(id));
 
     return () => {
@@ -425,6 +426,7 @@ export const useWebRTC = (
       signaling.off('answer');
       signaling.off('ice-candidate');
       signaling.off('peer-media-state');
+      signaling.off('screen-share-state');
       signaling.off('user-disconnected');
       
       peersRef.current.forEach(pc => pc.close());

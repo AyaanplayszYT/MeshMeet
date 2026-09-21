@@ -134,6 +134,7 @@ export interface ServerToClientEvents {
   'room-closed': (payload: { roomId: string }) => void;
   'hand-raise-update': (payload: { userId: string; isRaised: boolean; userName: string }) => void;
   'peer-media-state': (payload: PeerMediaState) => void;
+  'screen-share-state': (payload: { userId: string; isScreenShare: boolean }) => void;
 }
 
 // Events that the client sends to the server
@@ -160,4 +161,5 @@ export interface ClientToServerEvents {
   'toggle-waiting-room': (payload: { roomId: string }) => void;
   'raise-hand': (payload: { roomId: string; userId: string; isRaised: boolean; userName: string }) => void;
   'peer-media-state': (payload: { roomId: string; isMuted: boolean; isVideoStopped: boolean }) => void;
+  'screen-share-state': (payload: { roomId: string; isScreenShare: boolean }) => void;
 }
