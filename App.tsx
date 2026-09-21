@@ -462,6 +462,10 @@ const App = () => {
           screenStream.getTracks().forEach(t => t.stop());
           setScreenStream(null);
       } else {
+          if (!navigator.mediaDevices?.getDisplayMedia) {
+            showToast('Screen sharing is not supported in this browser.');
+            return;
+          }
           try {
               // Keep microphone audio from the local stream; display audio is optional and
               // causes capture to fail in browsers that do not support system-audio sharing.
@@ -470,8 +474,11 @@ const App = () => {
               stream.getVideoTracks()[0].onended = () => {
                   setScreenStream(null);
               };
-          } catch (e) {
-              console.log("Cancelled screen share");
+          } catch (error: any) {
+              console.error('Screen share failed', error);
+              if (error?.name !== 'AbortError' && error?.name !== 'NotAllowedError') {
+                showToast('Screen sharing could not start. Check browser permissions.');
+              }
           }
       }
   };

@@ -77,35 +77,37 @@ export const useWebRTC = (
 
   // Handle stream switching (e.g. Camera -> Screen Share)
   useEffect(() => {
-    if (localStream && localStreamRef.current && localStream.id !== localStreamRef.current.id) {
-        // Stream changed, we need to replace tracks in existing connections
-        const videoTrack = localStream.getVideoTracks()[0];
-        const audioTrack = localStream.getAudioTracks()[0];
-
-        peersRef.current.forEach(async (pc, peerId) => {
-            const senders = pc.getSenders();
-            const videoSender = senders.find(s => s.track?.kind === 'video');
-            const audioSender = senders.find(s => s.track?.kind === 'audio');
-            
-            if (videoSender && videoTrack) {
-                try {
-                    await videoSender.replaceTrack(videoTrack);
-                } catch (err) {
-                    console.error('Error replacing video track', err);
-                }
-            }
-            if (audioSender && audioTrack) {
-                try {
-                    await audioSender.replaceTrack(audioTrack);
-                } catch (err) {
-                    console.error('Error replacing audio track', err);
-                }
-            }
-            
-        });
+    if (!localStream) {
+      localStreamRef.current = null;
+      return;
     }
+
+    const videoTrack = localStream.getVideoTracks()[0];
+    const audioTrack = localStream.getAudioTracks()[0];
+
+    peersRef.current.forEach(async (pc) => {
+      const senders = pc.getSenders();
+      const videoSender = senders.find(s => s.track?.kind === 'video');
+      const audioSender = senders.find(s => s.track?.kind === 'audio');
+
+      if (videoSender && videoTrack && videoSender.track !== videoTrack) {
+        try {
+          await videoSender.replaceTrack(videoTrack);
+        } catch (err) {
+          console.error('Error replacing video track', err);
+        }
+      }
+      if (audioSender && audioTrack && audioSender.track !== audioTrack) {
+        try {
+          await audioSender.replaceTrack(audioTrack);
+        } catch (err) {
+          console.error('Error replacing audio track', err);
+        }
+      }
+    });
+
     localStreamRef.current = localStream;
-  }, [localStream, isScreenShare, userName]);
+  }, [localStream]);
 
   // Periodic Stats Gathering
   useEffect(() => {

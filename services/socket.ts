@@ -79,7 +79,9 @@ class SignalingService {
   constructor() {
     try {
       this.socket = io(SERVER_URL, {
-        transports: ['polling', 'websocket'],
+        // The hosted proxy currently rejects websocket upgrades; polling is the
+        // supported Socket.IO transport and avoids a misleading console error.
+        transports: ['polling'],
         autoConnect: false,
         reconnection: true,
         reconnectionAttempts: Infinity,
