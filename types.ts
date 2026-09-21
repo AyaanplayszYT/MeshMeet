@@ -143,6 +143,7 @@ export interface ServerToClientEvents {
   'peer-media-state': (payload: PeerMediaState) => void;
   'room-participants': (payload: { participants: RoomParticipant[] }) => void;
   'host-muted': (payload: { roomId: string }) => void;
+  'host-camera-disabled': (payload: { roomId: string }) => void;
   'kicked': (payload: { roomId: string }) => void;
   'screen-share-state': (payload: { userId: string; isScreenShare: boolean }) => void;
   'screen-offer': (payload: { callerId: string; userName: string; offer: RTCSessionDescriptionInit }) => void;
@@ -181,4 +182,6 @@ export interface ClientToServerEvents {
   'get-room-participants': (payload: { roomId: string }) => void;
   'mute-user': (payload: { roomId: string; userId: string }) => void;
   'kick-user': (payload: { roomId: string; userId: string }) => void;
+  'mute-all': (payload: { roomId: string }) => void;
+  'disable-camera-all': (payload: { roomId: string }) => void;
 }

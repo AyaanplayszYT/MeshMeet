@@ -9,6 +9,7 @@ import {
   CheckCheck, 
   UserX,
   MicOff,
+  VideoOff,
   Star,
   MoreVertical,
   Search,
@@ -40,6 +41,8 @@ interface HostControlsModalProps {
   onAdmitAll?: () => void;
   onMuteParticipant: (userId: string) => void;
   onKickParticipant: (userId: string) => void;
+  onMuteAll: () => void;
+  onDisableCameraAll: () => void;
 }
 
 export const HostControlsModal: React.FC<HostControlsModalProps> = ({
@@ -56,6 +59,8 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
   onAdmitAll,
   onMuteParticipant,
   onKickParticipant,
+  onMuteAll,
+  onDisableCameraAll,
 }) => {
   const [activeTab, setActiveTab] = useState<'access' | 'queue'>('access');
   const [admittingIds, setAdmittingIds] = useState<Set<string>>(new Set());
@@ -76,6 +81,7 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
   const [showPerformance, setShowPerformance] = useState(false);
   const [diagnosticsRunning, setDiagnosticsRunning] = useState(false);
   const [diagnosticsResult, setDiagnosticsResult] = useState<string | null>(null);
+  const [participantSearch, setParticipantSearch] = useState('');
 
   if (!isOpen) return null;
 
@@ -138,6 +144,11 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const visibleParticipants = participants.filter((participant) =>
+    participant.userName.toLowerCase().includes(participantSearch.trim().toLowerCase())
+  );
+  const sortedWaitingUsers = [...waitingUsers].sort((a, b) => a.userName.localeCompare(b.userName));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
@@ -484,13 +495,34 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
                   <span className="text-xs font-semibold text-zinc-200">Participants</span>
                   <span className="text-[10px] text-zinc-500">Host only</span>
                 </div>
+                {participants.length > 1 && (
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                    <input
+                      value={participantSearch}
+                      onChange={(event) => setParticipantSearch(event.target.value)}
+                      placeholder="Search participants"
+                      className="w-full rounded-xl border border-zinc-800 bg-zinc-900/80 py-2 pl-8 pr-3 text-xs text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-blue-500/60"
+                    />
+                  </div>
+                )}
+                {participants.some(participant => !participant.isHost) && (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={onMuteAll} className="flex-1 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-[10px] font-semibold text-amber-300 hover:bg-amber-500/20">
+                      <MicOff className="mr-1 inline h-3.5 w-3.5" /> Mute all
+                    </button>
+                    <button type="button" onClick={onDisableCameraAll} className="flex-1 rounded-xl border border-blue-500/30 bg-blue-500/10 px-2 py-2 text-[10px] font-semibold text-blue-300 hover:bg-blue-500/20">
+                      <VideoOff className="mr-1 inline h-3.5 w-3.5" /> Disable cameras
+                    </button>
+                  </div>
+                )}
                 {participants.length === 0 ? (
                   <p className="rounded-xl bg-zinc-900/60 border border-zinc-800 p-3 text-[11px] text-zinc-500">
                     Participant list is loading...
                   </p>
                 ) : (
                   <div className="space-y-1.5">
-                    {participants.map((participant) => (
+                    {visibleParticipants.map((participant) => (
                       <div key={participant.userId} className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-2.5 py-2">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 text-center text-[10px] leading-6 text-zinc-300">
@@ -551,7 +583,7 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
                 </div>
               ) : (
                 <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-                  {waitingUsers.map((user) => (
+                  {sortedWaitingUsers.map((user) => (
                     <div
                       key={user.odId}
                       className="flex items-center justify-between gap-3 p-2.5 rounded-xl border bg-zinc-900/90 border-zinc-800"

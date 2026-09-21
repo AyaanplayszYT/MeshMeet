@@ -5,10 +5,12 @@ import cors from 'cors';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 25585;
+const configuredOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(origin => origin.trim()).filter(Boolean);
+const corsOrigins = configuredOrigins.length > 0 ? configuredOrigins : '*';
 
 // Middleware
 app.use(cors({
-  origin: '*',
+  origin: corsOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -17,7 +19,7 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: corsOrigins,
     methods: ['GET', 'POST']
   },
   pingInterval: 10000,
@@ -62,6 +64,19 @@ const socketToUser = new Map<string, string>(); // socket.id -> odId
 const userToRoom = new Map<string, string>(); // odId -> roomId
 const userNames = new Map<string, string>(); // odId -> userName
 const whiteboardStates = new Map<string, WhiteboardState>();
+const eventRateWindows = new Map<string, { startedAt: number; count: number }>();
+
+const allowEvent = (socket: Socket, eventName: string, limit = 120, windowMs = 10_000) => {
+  const key = `${socket.id}:${eventName}`;
+  const now = Date.now();
+  const current = eventRateWindows.get(key);
+  if (!current || now - current.startedAt >= windowMs) {
+    eventRateWindows.set(key, { startedAt: now, count: 1 });
+    return true;
+  }
+  current.count += 1;
+  return current.count <= limit;
+};
 
 const getHostSocketId = (roomId: string) => {
   const hostId = roomMetadata.get(roomId)?.hostId;
@@ -443,6 +458,28 @@ io.on('connection', (socket: Socket) => {
     if (targetSocketId) io.to(targetSocketId).emit('host-muted', { roomId: payload.roomId });
   });
 
+  socket.on('mute-all', (payload: { roomId: string }) => {
+    const hostUserId = socketToUser.get(socket.id);
+    const meta = roomMetadata.get(payload.roomId);
+    if (meta?.hostId !== hostUserId) return;
+    for (const participantId of rooms.get(payload.roomId) || []) {
+      if (participantId === hostUserId) continue;
+      const targetSocketId = Array.from(socketToUser.entries()).find(([_, userId]) => userId === participantId)?.[0];
+      if (targetSocketId) io.to(targetSocketId).emit('host-muted', { roomId: payload.roomId });
+    }
+  });
+
+  socket.on('disable-camera-all', (payload: { roomId: string }) => {
+    const hostUserId = socketToUser.get(socket.id);
+    const meta = roomMetadata.get(payload.roomId);
+    if (meta?.hostId !== hostUserId) return;
+    for (const participantId of rooms.get(payload.roomId) || []) {
+      if (participantId === hostUserId) continue;
+      const targetSocketId = Array.from(socketToUser.entries()).find(([_, userId]) => userId === participantId)?.[0];
+      if (targetSocketId) io.to(targetSocketId).emit('host-camera-disabled', { roomId: payload.roomId });
+    }
+  });
+
   socket.on('kick-user', (payload: { roomId: string; userId: string }) => {
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(payload.roomId);
@@ -508,6 +545,7 @@ io.on('connection', (socket: Socket) => {
 
   // Chat message
   socket.on('chat-message', (payload) => {
+    if (!allowEvent(socket, 'chat-message', 30)) return;
     const userId = getSocketUserId(socket);
     if (!userId || !isActiveRoomMember(socket, payload.roomId) || !payload.message) return;
     const text = typeof payload.message.text === 'string' ? payload.message.text.trim().slice(0, 2000) : '';
@@ -522,6 +560,7 @@ io.on('connection', (socket: Socket) => {
 
   // Reaction
   socket.on('reaction', (payload) => {
+    if (!allowEvent(socket, 'reaction', 30)) return;
     const userId = getSocketUserId(socket);
     if (!userId || !isActiveRoomMember(socket, payload.roomId) || !payload.reaction) return;
     const emoji = typeof payload.reaction.emoji === 'string' ? payload.reaction.emoji.slice(0, 16) : '';
@@ -531,6 +570,7 @@ io.on('connection', (socket: Socket) => {
 
   // Caption
   socket.on('caption', (payload) => {
+    if (!allowEvent(socket, 'caption', 60)) return;
     const userId = getSocketUserId(socket);
     if (!userId || !isActiveRoomMember(socket, payload.roomId) || !payload.caption) return;
     const text = typeof payload.caption.text === 'string' ? payload.caption.text.trim().slice(0, 500) : '';
@@ -546,6 +586,7 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('whiteboard-draw', (payload) => {
+    if (!allowEvent(socket, 'whiteboard-draw', 600)) return;
     if (!isActiveRoomMember(socket, payload.roomId) || !payload.data) return;
     const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
     state.draws.push(payload.data);
@@ -561,6 +602,7 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('whiteboard-image', (payload: { roomId: string; image: string; x: number; y: number; width: number; height: number }) => {
+    if (!allowEvent(socket, 'whiteboard-image', 10)) return;
     if (!isActiveRoomMember(socket, payload.roomId) || typeof payload.image !== 'string' || payload.image.length > 2_000_000) return;
     const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
     state.images.push({ image: payload.image, x: payload.x, y: payload.y, width: payload.width, height: payload.height });
@@ -569,6 +611,7 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('whiteboard-notes-update', (payload: { roomId: string; notes: any[] }) => {
+    if (!allowEvent(socket, 'whiteboard-notes-update', 30)) return;
     if (!isActiveRoomMember(socket, payload.roomId) || !Array.isArray(payload.notes) || payload.notes.length > 100) return;
     const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
     state.notes = payload.notes;
@@ -606,6 +649,7 @@ io.on('connection', (socket: Socket) => {
   });
 
   const forwardScreenSignal = (event: 'screen-offer' | 'screen-answer' | 'screen-ice-candidate', payload: any) => {
+    if (!allowEvent(socket, event, 120)) return;
     const roomId = userToRoom.get(socketToUser.get(socket.id) || '');
     if (!roomId || !payload.targetUserId || !rooms.get(roomId)?.has(payload.targetUserId)) return;
     socket.to(roomId).emit(event, {
@@ -760,6 +804,9 @@ io.on('connection', (socket: Socket) => {
     }
 
     socketToUser.delete(socket.id);
+    for (const key of eventRateWindows.keys()) {
+      if (key.startsWith(`${socket.id}:`)) eventRateWindows.delete(key);
+    }
     userToRoom.delete(odId);
     userNames.delete(odId);
     console.log(`[Socket] Disconnected: ${socket.id} (user: ${odId})`);

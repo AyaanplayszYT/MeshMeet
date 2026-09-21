@@ -28,6 +28,7 @@ interface ControlsProps {
   isRecording: boolean;
   recordingDuration: number;
   showChat: boolean;
+  unreadChatCount: number;
   showWhiteboard: boolean;
   roomId: string;
   onToggleMute: () => void;
@@ -87,6 +88,7 @@ export const Controls: React.FC<ControlsProps> = ({
   isRecording,
   recordingDuration,
   showChat,
+  unreadChatCount,
   showWhiteboard,
   onToggleMute,
   onToggleVideo,
@@ -117,7 +119,7 @@ export const Controls: React.FC<ControlsProps> = ({
   };
 
   return (
-    <div className="fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center gap-3 z-50">
+    <div className="fixed bottom-5 left-1/2 w-[calc(100vw-1rem)] max-w-max -translate-x-1/2 flex items-center gap-3 z-50">
       
       {/* Reaction Popover */}
       {showReactions && (
@@ -136,7 +138,8 @@ export const Controls: React.FC<ControlsProps> = ({
       )}
 
       {/* Main Glass Control Dock */}
-      <div className="flex items-center gap-1.5 sm:gap-2 bg-zinc-950/75 backdrop-blur-3xl p-2 sm:p-2.5 rounded-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.7),inset_0_1px_1px_0_rgba(255,255,255,0.15)] overflow-visible">
+      <div className="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex w-max items-center gap-1.5 sm:gap-2 bg-zinc-950/75 backdrop-blur-3xl p-2 sm:p-2.5 rounded-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.7),inset_0_1px_1px_0_rgba(255,255,255,0.15)] overflow-visible">
         
         {/* Mute Mic */}
         <ControlButton
@@ -259,7 +262,14 @@ export const Controls: React.FC<ControlsProps> = ({
           onClick={onToggleChat}
           active={showChat}
         >
-          <MessageSquare className="w-5 h-5" />
+          <span className="relative">
+            <MessageSquare className="w-5 h-5" />
+            {unreadChatCount > 0 && !showChat && (
+              <span className="absolute -right-2 -top-2 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[9px] font-bold leading-4 text-white">
+                {unreadChatCount > 9 ? '9+' : unreadChatCount}
+              </span>
+            )}
+          </span>
         </ControlButton>
 
         <div className="w-px h-7 bg-white/10 mx-0.5" />
@@ -273,6 +283,7 @@ export const Controls: React.FC<ControlsProps> = ({
           <PhoneOff className="w-5 h-5" />
         </ControlButton>
 
+      </div>
       </div>
     </div>
   );

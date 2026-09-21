@@ -37,6 +37,7 @@ const App = () => {
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({ isLocked: false, waitingRoom: false });
   const [meetingStartedAt, setMeetingStartedAt] = useState<number | undefined>();
   const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
+  const waitingUsersCountRef = useRef(0);
   const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
   const [showHostControls, setShowHostControls] = useState(false);
 
@@ -61,6 +62,7 @@ const App = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
   const [showWhiteboard, setShowWhiteboard] = useState(false);
   const [whiteboardMode, setWhiteboardMode] = useState<'stage' | 'popup'>('popup');
   const [activeReactions, setActiveReactions] = useState<{ id: string; emoji: string; left: number; drift: number }[]>([]);
@@ -182,6 +184,10 @@ const App = () => {
     });
     
     signaling.on('waiting-room-update', (payload: { roomId: string; waitingUsers: WaitingUser[] }) => {
+      if (payload.waitingUsers.length > waitingUsersCountRef.current) {
+        showToast('A participant is waiting for admission');
+      }
+      waitingUsersCountRef.current = payload.waitingUsers.length;
       setWaitingUsers(payload.waitingUsers);
     });
 
@@ -198,6 +204,12 @@ const App = () => {
       localStreamRef.current?.getAudioTracks().forEach(track => { track.enabled = false; });
       setIsMuted(true);
       showToast('The host muted your microphone');
+    });
+
+    signaling.on('host-camera-disabled', () => {
+      localStreamRef.current?.getVideoTracks().forEach(track => { track.enabled = false; });
+      setIsVideoStopped(true);
+      showToast('The host disabled your camera');
     });
 
     signaling.on('kicked', () => {
@@ -280,6 +292,7 @@ const App = () => {
       signaling.off('waiting-room-update');
       signaling.off('room-participants');
       signaling.off('host-muted');
+      signaling.off('host-camera-disabled');
       signaling.off('kicked');
       signaling.off('room-settings-update');
       signaling.off('host-changed');
@@ -399,6 +412,16 @@ const App = () => {
 
   const handleMuteParticipant = (participantId: string) => {
     signaling.emit('mute-user', { roomId, userId: participantId });
+  };
+
+  const handleMuteAll = () => {
+    signaling.emit('mute-all', { roomId });
+    showToast('All participants were muted');
+  };
+
+  const handleDisableCameraAll = () => {
+    signaling.emit('disable-camera-all', { roomId });
+    showToast('All participant cameras were disabled');
   };
 
   const handleKickParticipant = (participantId: string) => {
@@ -590,6 +613,7 @@ const App = () => {
   };
 
   const leaveRoom = () => {
+    if (!window.confirm('Leave this meeting?')) return;
     if (isRecording) {
       stopRecording();
     }
@@ -718,6 +742,8 @@ const App = () => {
           onAdmitAll={handleAdmitAll}
           onMuteParticipant={handleMuteParticipant}
           onKickParticipant={handleKickParticipant}
+          onMuteAll={handleMuteAll}
+          onDisableCameraAll={handleDisableCameraAll}
         />
 
         <SettingsModal
@@ -826,9 +852,10 @@ const App = () => {
             userId={userId} 
             myUserName={username}
             peerNames={peerNames}
-            onNewMessage={(senderName, text) => {
-              if (!showChat) {
-                const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
+             onNewMessage={(senderName, text) => {
+               if (!showChat) {
+                 setUnreadChatCount(prev => prev + 1);
+                 const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
                 showToast(`💬 ${senderName}: ${preview}`);
               }
             }}
@@ -844,7 +871,8 @@ const App = () => {
            isHandRaised={isHandRaised}
           isRecording={isRecording}
           recordingDuration={recordingDuration}
-          showChat={showChat}
+           showChat={showChat}
+           unreadChatCount={unreadChatCount}
           showWhiteboard={showWhiteboard}
           roomId={roomId}
           onToggleMute={toggleMute}
@@ -856,7 +884,10 @@ const App = () => {
           onToggleRaiseHand={handleToggleRaiseHand}
           onToggleRecord={handleToggleRecord}
           onCopyInvite={handleCopyInvite}
-          onToggleChat={() => setShowChat(!showChat)}
+           onToggleChat={() => setShowChat(prev => {
+             if (!prev) setUnreadChatCount(0);
+             return !prev;
+           })}
           onToggleWhiteboard={() => setShowWhiteboard(!showWhiteboard)}
           onOpenSettings={() => setShowSettings(true)}
           onLeave={leaveRoom}
