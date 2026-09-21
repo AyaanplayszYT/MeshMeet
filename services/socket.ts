@@ -146,9 +146,9 @@ class SignalingService {
   public off(event: string, callback?: Function) {
     if (this.socket) {
         if (callback) {
-            this.socket.off(event, callback as any);
+             this.socket.off(event as any, callback as any);
         } else {
-            this.socket.off(event);
+             this.socket.off(event as any);
         }
     }
   }
@@ -160,7 +160,7 @@ class SignalingService {
           // and sends them once the connection is established.
           // Blocking them here causes "ghost rooms" where the user joins locally
           // but the server never receives the join-room event.
-          this.socket.emit(event, ...args);
+           this.socket.emit(event as any, ...args);
       } else {
           console.warn(`Cannot emit '${event}': Socket not initialized.`);
       }

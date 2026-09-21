@@ -40,6 +40,20 @@ interface WaitingUser {
   userName: string;
 }
 
+interface WhiteboardImage {
+  image: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface WhiteboardState {
+  draws: unknown[];
+  images: WhiteboardImage[];
+  notes: unknown[];
+}
+
 // In-memory state
 const rooms = new Map<string, Set<string>>(); // roomId -> Set of odIds
 const roomMetadata = new Map<string, RoomMeta>(); // roomId -> RoomMeta
@@ -47,6 +61,7 @@ const waitingRooms = new Map<string, Map<string, WaitingUser>>(); // roomId -> (
 const socketToUser = new Map<string, string>(); // socket.id -> odId
 const userToRoom = new Map<string, string>(); // odId -> roomId
 const userNames = new Map<string, string>(); // odId -> userName
+const whiteboardStates = new Map<string, WhiteboardState>();
 
 const startTime = Date.now();
 
@@ -281,7 +296,8 @@ io.on('connection', (socket: Socket) => {
     socket.emit('room-joined', {
       roomId,
       isHost: meta?.hostId === odId,
-      settings: getRoomSettings(roomId)
+      settings: getRoomSettings(roomId),
+      startedAt: meta?.createdAt || Date.now()
     });
 
     console.log(`[Room ${roomId}] User ${odId} joined. Total users: ${roomUsers?.size}`);
@@ -320,7 +336,8 @@ io.on('connection', (socket: Socket) => {
         targetSocket.emit('admitted', {
           roomId,
           isHost: false,
-          settings: getRoomSettings(roomId)
+          settings: getRoomSettings(roomId),
+          startedAt: meta?.createdAt || Date.now()
         });
 
         console.log(`[Room ${roomId}] User ${odId} admitted by host`);
@@ -457,19 +474,35 @@ io.on('connection', (socket: Socket) => {
   });
 
   // Whiteboard events
+  socket.on('whiteboard-request-state', (payload: { roomId: string }) => {
+    const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
+    socket.emit('whiteboard-state', state);
+  });
+
   socket.on('whiteboard-draw', (payload) => {
+    const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
+    state.draws.push(payload.data);
+    if (state.draws.length > 20000) state.draws.splice(0, state.draws.length - 20000);
+    whiteboardStates.set(payload.roomId, state);
     socket.to(payload.roomId).emit('whiteboard-draw', payload.data);
   });
 
   socket.on('whiteboard-clear', (payload) => {
+    whiteboardStates.set(payload.roomId, { draws: [], images: [], notes: [] });
     socket.to(payload.roomId).emit('whiteboard-clear');
   });
 
   socket.on('whiteboard-image', (payload: { roomId: string; image: string; x: number; y: number; width: number; height: number }) => {
+    const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
+    state.images.push({ image: payload.image, x: payload.x, y: payload.y, width: payload.width, height: payload.height });
+    whiteboardStates.set(payload.roomId, state);
     socket.to(payload.roomId).emit('whiteboard-image', payload);
   });
 
   socket.on('whiteboard-notes-update', (payload: { roomId: string; notes: any[] }) => {
+    const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
+    state.notes = payload.notes;
+    whiteboardStates.set(payload.roomId, state);
     socket.to(payload.roomId).emit('whiteboard-notes-update', payload.notes);
   });
 
@@ -528,6 +561,7 @@ io.on('connection', (socket: Socket) => {
       if (roomUsers.size === 0) {
         rooms.delete(roomId);
         roomMetadata.delete(roomId);
+        whiteboardStates.delete(roomId);
 
         const waiting = waitingRooms.get(roomId);
         if (waiting) {
@@ -607,6 +641,7 @@ io.on('connection', (socket: Socket) => {
       if (roomUsers?.size === 0) {
         rooms.delete(roomId);
         roomMetadata.delete(roomId);
+        whiteboardStates.delete(roomId);
 
         const waiting = waitingRooms.get(roomId);
         if (waiting) {

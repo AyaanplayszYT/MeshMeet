@@ -88,8 +88,8 @@ export const PublicRoomsHub: React.FC<PublicRoomsHubProps> = ({
 
       {/* Rooms Grid */}
       {filteredRooms.length === 0 ? (
-        <div className="relative overflow-hidden rounded-[22px] border border-dashed border-zinc-700 bg-zinc-900 p-10 text-center shadow-[0_12px_28px_rgba(0,0,0,0.2)]">
-          <div className="mx-auto w-14 h-14 rounded-xl bg-zinc-950 border border-zinc-700 flex items-center justify-center mb-4 text-zinc-500">
+        <div className="relative overflow-hidden rounded-3xl border border-dashed border-zinc-800/80 bg-zinc-950/40 p-10 text-center backdrop-blur-md">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-500">
             <Globe className="w-7 h-7" />
           </div>
           <h4 className="text-lg font-semibold text-white mb-1">
@@ -117,10 +117,10 @@ export const PublicRoomsHub: React.FC<PublicRoomsHubProps> = ({
             return (
               <div
                 key={room.roomId}
-                className="group relative flex flex-col justify-between rounded-[22px] border border-zinc-700 bg-zinc-900 p-5 transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-800 hover:shadow-[0_14px_30px_rgba(0,0,0,0.3)]"
+                className="group relative flex flex-col justify-between rounded-2xl border border-zinc-800/90 bg-zinc-900/50 p-5 backdrop-blur-md transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/90 hover:shadow-xl hover:shadow-black/50"
               >
                 {/* Background glow on hover */}
-                <div className="absolute inset-0 rounded-[22px] bg-white/[0.025] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
                 <div className="space-y-3 relative z-10">
                   {/* Top row: Badges & Copy button */}
@@ -172,7 +172,7 @@ export const PublicRoomsHub: React.FC<PublicRoomsHubProps> = ({
 
                 {/* Bottom row: Participants & Join Button */}
                 <div className="flex items-center justify-between pt-4 border-t border-zinc-800/80 mt-4 relative z-10">
-                  <div className="flex items-center gap-2 text-zinc-300 text-xs font-medium bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-700">
+                  <div className="flex items-center gap-2 text-zinc-300 text-xs font-medium bg-black/40 px-3 py-1.5 rounded-full border border-zinc-800">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>

@@ -43,8 +43,11 @@ export const useLiveCaptions = (roomId: string, userId: string) => {
   }, []);
 
   useEffect(() => {
+    let shouldKeepListening = true;
+    let restartTimer: number | null = null;
+
     if (isCaptionsEnabled) {
-        if ('webkitSpeechRecognition' in window) {
+      if ('webkitSpeechRecognition' in window) {
             const recognition = new window.webkitSpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;
@@ -67,16 +70,40 @@ export const useLiveCaptions = (roomId: string, userId: string) => {
             };
 
             recognition.onerror = (event: any) => {
-                console.error("Speech recognition error", event.error);
+                if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                    shouldKeepListening = false;
+                    setIsCaptionsEnabled(false);
+                    return;
+                }
+                console.warn("Speech recognition error", event.error);
             };
 
-            recognition.start();
+            // Browser speech recognition stops periodically; restart it while captions remain enabled.
+            recognition.onend = () => {
+                if (!shouldKeepListening) return;
+                restartTimer = window.setTimeout(() => {
+                    try {
+                        recognition.start();
+                    } catch {
+                        // Recognition may already be restarting.
+                    }
+                }, 250);
+            };
+
+            try {
+                recognition.start();
+            } catch (error) {
+                console.warn('Could not start live captions', error);
+                setIsCaptionsEnabled(false);
+                return;
+            }
             recognitionRef.current = recognition;
         } else {
             console.warn("Web Speech API not supported in this browser");
             setIsCaptionsEnabled(false);
         }
     } else {
+        setCaptions(new Map());
         if (recognitionRef.current) {
             recognitionRef.current.stop();
             recognitionRef.current = null;
@@ -84,8 +111,12 @@ export const useLiveCaptions = (roomId: string, userId: string) => {
     }
 
     return () => {
+        shouldKeepListening = false;
+        if (restartTimer !== null) window.clearTimeout(restartTimer);
         if (recognitionRef.current) {
+            recognitionRef.current.onend = null;
             recognitionRef.current.stop();
+            recognitionRef.current = null;
         }
     };
   }, [isCaptionsEnabled, roomId, userId]);

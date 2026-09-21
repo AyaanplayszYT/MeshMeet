@@ -118,7 +118,7 @@ const TooltipButton: React.FC<{
     >
       {children}
     </button>
-    <div className="absolute -top-9 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950/95 backdrop-blur-md text-white text-[10px] font-medium rounded-lg border border-white/15 shadow-xl opacity-0 group-hover/btn:opacity-100 transition-all duration-150 pointer-events-none whitespace-nowrap z-50">
+      <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-zinc-950/95 backdrop-blur-md text-white text-[10px] font-medium rounded-lg border border-white/15 shadow-xl opacity-0 group-hover/btn:opacity-100 transition-all duration-150 pointer-events-none whitespace-nowrap z-[70]">
       {label}
     </div>
   </div>
@@ -355,7 +355,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
         const oldHeight = canvas.height;
         const width = containerRef.current.clientWidth;
         const height = containerRef.current.clientHeight;
-        const pixelRatio = Math.max(1, window.devicePixelRatio || 1);
         let tempCanvas: HTMLCanvasElement | null = null;
 
         if (oldWidth > 0 && oldHeight > 0) {
@@ -368,9 +367,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
           }
         }
 
-        canvas.width = Math.max(1, Math.round(width * pixelRatio));
-        canvas.height = Math.max(1, Math.round(height * pixelRatio));
-        ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        // Use 1:1 pixel mapping — avoids DPR scaling bugs with getImageData/putImageData
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
 
         if (tempCanvas && tempCanvas.width > 0 && tempCanvas.height > 0) {
           ctx.drawImage(tempCanvas, 0, 0, oldWidth, oldHeight, 0, 0, width, height);
@@ -616,24 +616,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
 
   // Outer container styling depending on mode
   const containerClasses = mode === 'stage'
-    ? "w-full h-full relative bg-zinc-900 border border-zinc-700 rounded-[26px] overflow-hidden flex flex-col shadow-[0_16px_36px_rgba(0,0,0,0.35)]"
-    : "fixed top-16 bottom-24 inset-x-3 sm:inset-x-8 md:inset-x-16 max-w-4xl mx-auto z-40 bg-zinc-900 border border-zinc-700 rounded-[26px] shadow-[0_20px_55px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200";
+    ? "w-full h-full relative bg-[#09090b] border border-zinc-800 rounded-[30px] overflow-hidden flex flex-col shadow-[0_25px_70px_rgba(0,0,0,0.95)]"
+    : "fixed top-16 bottom-24 inset-x-3 sm:inset-x-8 md:inset-x-16 max-w-4xl mx-auto z-40 bg-[#09090b] border border-zinc-800 rounded-[30px] shadow-[0_25px_70px_rgba(0,0,0,0.95)] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200";
 
   return (
     <div className={containerClasses}>
-      <div className="h-14 shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 border-b border-zinc-800 bg-zinc-900">
-        <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-white truncate">Collaborative whiteboard</h2>
-          <p className="text-[10px] text-zinc-500 truncate">Draw, add notes, and share ideas with everyone</p>
-        </div>
-        <span className="text-[10px] uppercase tracking-wider text-zinc-500 shrink-0">
-          {mode === 'stage' ? 'Docked' : 'Floating'}
-        </span>
-      </div>
-
-      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0 bg-zinc-950/55">
-      {/* Sleek Floating Glass Toolbar */}
-      <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-zinc-900 border border-zinc-700 rounded-xl p-1.5 sm:p-2 flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 shadow-lg z-30 max-w-[calc(100%-1rem)]">
+      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0 bg-[#09090b]">
+        {/* Sleek Floating Glass Toolbar */}
+        <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-zinc-900/90 border border-zinc-800 rounded-2xl p-1.5 sm:p-2 flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 shadow-xl z-30 max-w-[calc(100%-1rem)] backdrop-blur-xl">
         
         {/* Tool Selector */}
         <div className="flex items-center gap-0.5 sm:gap-1 pr-1.5 border-r border-white/10">
@@ -678,7 +668,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
           </div>
         ) : (
           /* Eraser Size Configurator */
-          <div className="flex items-center gap-1.5 px-2 bg-white/5 rounded-xl py-0.5">
+          <div className="flex items-center gap-1.5 px-2 bg-[#121316] border border-zinc-800 rounded-xl py-0.5">
             <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase">Size:</span>
             {ERASER_SIZES.map(s => (
               <button
@@ -783,14 +773,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
       </div>
 
       {/* Synced Collaborative Sticky Notes Layer */}
-      <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden p-1">
+      <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden" style={{top: 0}}>
         {notes.map(note => {
           const colorMeta = NOTE_COLORS.find(c => c.key === note.color) || NOTE_COLORS[0];
           return (
             <div
               key={note.id}
               style={{ left: `${note.x}%`, top: `${note.y}%` }}
-              className={`absolute w-44 sm:w-48 p-3 rounded-xl shadow-xl border ${colorMeta.border} ${colorMeta.bg} ${colorMeta.text} pointer-events-auto cursor-grab active:cursor-grabbing transition-shadow select-none animate-in fade-in zoom-in-90 duration-150`}
+              className={`absolute w-44 sm:w-48 p-3 rounded-2xl shadow-xl border ${colorMeta.border} ${colorMeta.bg} ${colorMeta.text} pointer-events-auto cursor-grab active:cursor-grabbing transition-shadow select-none animate-in fade-in zoom-in-90 duration-150`}
               onMouseDown={(e) => handleNoteDragStart(e, note)}
               onTouchStart={(e) => handleNoteDragStart(e, note)}
             >

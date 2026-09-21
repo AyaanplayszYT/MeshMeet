@@ -91,6 +91,20 @@ export interface StickyNote {
   author?: string;
 }
 
+export interface WhiteboardImage {
+  image: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface WhiteboardState {
+  draws: DrawLine[];
+  images: WhiteboardImage[];
+  notes: StickyNote[];
+}
+
 // Events that the client listens to from the server
 export interface ServerToClientEvents {
   'user-connected': (userId: string) => void;
@@ -106,13 +120,14 @@ export interface ServerToClientEvents {
   'whiteboard-clear': () => void;
   'whiteboard-image': (payload: { image: string; x: number; y: number; width: number; height: number }) => void;
   'whiteboard-notes-update': (notes: StickyNote[]) => void;
+  'whiteboard-state': (state: WhiteboardState) => void;
   'caption': (caption: Caption) => void;
   // Waiting room & lock events
-  'room-joined': (payload: { roomId: string; isHost: boolean; settings: RoomSettings }) => void;
+  'room-joined': (payload: { roomId: string; isHost: boolean; settings: RoomSettings; startedAt: number }) => void;
   'room-locked': (payload: { roomId: string }) => void;
   'waiting-room': (payload: { roomId: string; position: number }) => void;
   'waiting-room-update': (payload: { roomId: string; waitingUsers: WaitingUser[] }) => void;
-  'admitted': (payload: { roomId: string; isHost: boolean; settings: RoomSettings }) => void;
+  'admitted': (payload: { roomId: string; isHost: boolean; settings: RoomSettings; startedAt: number }) => void;
   'denied': (payload: { roomId: string }) => void;
   'room-settings-update': (settings: RoomSettings) => void;
   'host-changed': (payload: { isHost: boolean }) => void;
@@ -136,6 +151,7 @@ export interface ClientToServerEvents {
   'whiteboard-clear': (payload: { roomId: string }) => void;
   'whiteboard-image': (payload: { roomId: string; image: string; x: number; y: number; width: number; height: number }) => void;
   'whiteboard-notes-update': (payload: { roomId: string; notes: StickyNote[] }) => void;
+  'whiteboard-request-state': (payload: { roomId: string }) => void;
   'caption': (payload: { roomId: string; caption: Caption }) => void;
   // Host controls
   'admit-user': (payload: { roomId: string; odId: string }) => void;

@@ -34,7 +34,8 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
 
   return (
     <header className="sticky top-4 sm:top-5 z-40 w-full flex justify-center px-3 sm:px-6 pointer-events-none">
-      <div className="max-w-4xl w-full bg-zinc-900 border border-zinc-700 rounded-2xl px-3.5 sm:px-5 py-2 flex items-center justify-between gap-3 shadow-[0_10px_26px_rgba(0,0,0,0.35)] pointer-events-auto transition-all hover:border-zinc-600">
+      {/* True Glassmorphic Pill Navbar */}
+      <div className="max-w-4xl w-full bg-zinc-950/40 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 rounded-full px-3.5 sm:px-5 py-2 flex items-center justify-between gap-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.55),inset_0_1px_1px_0_rgba(255,255,255,0.15)] pointer-events-auto transition-all hover:border-white/20">
         
         {/* Left: Brand Identity with favicon.ico */}
         <div className="flex items-center gap-2.5">
@@ -55,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
             href="https://github.com/AyaanplayszYT/MeshMeet"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-colors text-xs font-medium"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-300 hover:text-white transition-all text-xs font-medium backdrop-blur-md shadow-sm"
             title="View Source on GitHub"
           >
             <Github className="w-3.5 h-3.5" />
@@ -67,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
             href="https://github.com/AyaanplayszYT/MeshMeet/releases"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-colors text-xs font-medium"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-300 hover:text-white transition-all text-xs font-medium backdrop-blur-md shadow-sm"
             title="View Releases & Changelog"
           >
             <ScrollText className="w-3.5 h-3.5" />
@@ -79,7 +80,7 @@ export const Navbar: React.FC<NavbarProps> = ({ isConnected, onRefreshRooms }) =
             href={`${apiUrl}/health`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-colors text-xs font-mono"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-300 hover:text-white transition-all text-xs font-mono backdrop-blur-md shadow-sm"
             title={`API Health: ${apiUrl}/health`}
           >
             <Activity className={`w-3.5 h-3.5 ${apiHealth?.ok ? 'text-emerald-400' : 'text-amber-400'}`} />

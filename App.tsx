@@ -15,7 +15,7 @@ import Navbar from './components/Navbar';
 import PublicRoomsHub from './components/PublicRoomsHub';
 import HostControlsModal from './components/HostControlsModal';
 import { signaling } from './services/socket';
-import { RoomInfo, RoomSettings, WaitingUser } from './types';
+import { Reaction, RoomInfo, RoomSettings, WaitingUser } from './types';
 
 const generateId = () => Math.random().toString(36).substr(2, 6);
 
@@ -44,12 +44,12 @@ const App = () => {
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [raisedHands, setRaisedHands] = useState<Set<string>>(new Set());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  
   // Media State
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoStopped, setIsVideoStopped] = useState(false);
+  const [isNoiseCancellationEnabled, setIsNoiseCancellationEnabled] = useState(true);
   
   // Blur Hook
   const { finalStream, isBlurEnabled, toggleBlur } = useBackgroundBlur(localStream);
@@ -58,7 +58,7 @@ const App = () => {
   const { captions, isCaptionsEnabled, toggleCaptions } = useLiveCaptions(roomId, userId);
 
   // Meeting Recording Hook (100% Client-side MediaRecorder)
-  const { isRecording, duration: recordingDuration, startRecording, stopRecording } = useMeetingRecorder();
+  const { isRecording, recordingTime: recordingDuration, startRecording, stopRecording } = useMeetingRecorder();
 
   // UI State
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +79,40 @@ const App = () => {
       setToastMessage((cur) => (cur === msg ? null : cur));
     }, 3000);
   };
+
+  // Global Keyboard Shortcuts (M=mute, V=video, Esc=close, C=chat, W=whiteboard, S=settings, H=host)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Esc: close open modals/panels (most to least specific)
+      if (e.key === 'Escape') {
+        if (showSettings) { setShowSettings(false); return; }
+        if (showHostControls) { setShowHostControls(false); return; }
+        if (showChat) { setShowChat(false); return; }
+        if (showWhiteboard) { setShowWhiteboard(false); return; }
+        return;
+      }
+
+      // Don't trigger shortcuts when typing in inputs
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable) return;
+
+      // Only handle shortcuts in room mode
+      if (mode !== 'room') return;
+
+      switch (e.key.toLowerCase()) {
+        case 'm': toggleMute(); break;
+        case 'v': toggleVideo(); break;
+        case 'c': setShowChat(prev => !prev); break;
+        case 'w': setShowWhiteboard(prev => !prev); break;
+        case 's': setShowSettings(prev => !prev); break;
+        case 'h': if (isHost) setShowHostControls(prev => !prev); break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, showSettings, showHostControls, showChat, showWhiteboard, isHost, isMuted, isVideoStopped, localStream]);
+
 
   // 1-Click invite link detection in URL query string (?room=... or ?r=...)
   useEffect(() => {
@@ -117,10 +151,10 @@ const App = () => {
     });
     
     // Waiting room & host events
-    signaling.on('room-joined', (payload: { roomId: string; isHost: boolean; settings: RoomSettings }) => {
-      setIsHost(payload.isHost);
-      setRoomSettings(payload.settings);
-      setMeetingStartedAt(payload.settings.startedAt);
+     signaling.on('room-joined', (payload: { roomId: string; isHost: boolean; settings: RoomSettings; startedAt?: number }) => {
+       setIsHost(payload.isHost);
+       setRoomSettings(payload.settings);
+       setMeetingStartedAt(payload.startedAt ?? payload.settings.startedAt ?? Date.now());
       setMode('room');
     });
     
@@ -133,10 +167,10 @@ const App = () => {
       setMode('waiting');
     });
     
-    signaling.on('admitted', (payload: { roomId: string; isHost: boolean; settings: RoomSettings }) => {
-      setIsHost(payload.isHost);
-      setRoomSettings(payload.settings);
-      setMeetingStartedAt(payload.settings.startedAt);
+     signaling.on('admitted', (payload: { roomId: string; isHost: boolean; settings: RoomSettings; startedAt?: number }) => {
+       setIsHost(payload.isHost);
+       setRoomSettings(payload.settings);
+       setMeetingStartedAt(payload.startedAt ?? payload.settings.startedAt ?? Date.now());
       setMode('room');
     });
     
@@ -198,12 +232,12 @@ const App = () => {
 
     signaling.on('reaction', handleReactionEvent);
     window.addEventListener('local-reaction' as any, handleLocalReactionEvent);
-    
+
     // Periodic refresh of rooms
     const interval = setInterval(() => {
-        if (signaling.connected) {
-            signaling.emit('get-rooms');
-        }
+      if (signaling.connected) {
+        signaling.emit('get-rooms');
+      }
     }, 5000);
 
     return () => {
@@ -226,13 +260,20 @@ const App = () => {
     };
   }, []);
 
+  const getAudioConstraints = (deviceId?: string): MediaTrackConstraints => ({
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    echoCancellation: true,
+    noiseSuppression: isNoiseCancellationEnabled,
+    autoGainControl: true
+  });
+
   const initMedia = async () => {
     setIsLoading(true);
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true
+         audio: getAudioConstraints()
       });
       setLocalStream(stream);
       setIsLoading(false);
@@ -240,7 +281,7 @@ const App = () => {
     } catch (err: any) {
       console.warn("Standard media constraints failed, falling back to basic audio/video", err);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: getAudioConstraints() });
         setLocalStream(stream);
         setIsLoading(false);
         return stream;
@@ -365,6 +406,24 @@ const App = () => {
     }
   };
 
+  const toggleNoiseCancellation = async () => {
+    const enabled = !isNoiseCancellationEnabled;
+    setIsNoiseCancellationEnabled(enabled);
+    if (!localStream) return;
+
+    await Promise.all(localStream.getAudioTracks().map(async (track) => {
+      try {
+        await track.applyConstraints({
+          echoCancellation: true,
+          noiseSuppression: enabled,
+          autoGainControl: true
+        });
+      } catch (error) {
+        console.warn('Noise cancellation constraints are not supported by this device', error);
+      }
+    }));
+  };
+
   const toggleScreenShare = async () => {
       if (screenStream) {
           screenStream.getTracks().forEach(t => t.stop());
@@ -389,7 +448,7 @@ const App = () => {
     if (kind === 'audioinput') localStream.getAudioTracks().forEach(t => t.stop());
 
     const constraints: MediaStreamConstraints = {
-        audio: kind === 'audioinput' ? { deviceId: { exact: deviceId } } : { deviceId: localStream.getAudioTracks()[0]?.getSettings().deviceId },
+        audio: getAudioConstraints(kind === 'audioinput' ? deviceId : localStream.getAudioTracks()[0]?.getSettings().deviceId),
         video: kind === 'videoinput' ? { deviceId: { exact: deviceId } } : { deviceId: localStream.getVideoTracks()[0]?.getSettings().deviceId }
     };
     
@@ -458,7 +517,7 @@ const App = () => {
       stopRecording();
       showToast('Meeting recording saved and downloaded (.webm)');
     } else {
-      const started = await startRecording(activeStream);
+      const started = await startRecording();
       if (started) {
         showToast('Local meeting recording started');
       } else {
@@ -586,25 +645,6 @@ const App = () => {
           handRaiseCount={raisedHands.size}
           onCopyInvite={handleCopyInvite}
         />
-        
-        {/* Host Controls Button */}
-        {isHost && (
-          <div className="absolute top-4 sm:top-5 right-4 sm:right-6 z-40">
-            <button
-              onClick={() => setShowHostControls(true)}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-zinc-900/90 border border-zinc-700 text-white hover:bg-zinc-800 transition-all shadow-xl backdrop-blur-md hover:scale-105"
-              title="Host Controls"
-            >
-              <ShieldCheck className="w-4 h-4 text-blue-400" />
-              <span className="text-xs font-semibold">Host</span>
-              {waitingUsers.length > 0 && (
-                <span className="w-5 h-5 rounded-full bg-amber-500 text-black text-[10px] font-bold flex items-center justify-center animate-pulse">
-                  {waitingUsers.length}
-                </span>
-              )}
-            </button>
-          </div>
-        )}
 
         {/* Host Controls Modal */}
         <HostControlsModal
@@ -618,6 +658,16 @@ const App = () => {
           onAdmitUser={handleAdmitUser}
           onDenyUser={handleDenyUser}
           onAdmitAll={handleAdmitAll}
+        />
+
+        <SettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          currentCameraId={localStream?.getVideoTracks()[0]?.getSettings().deviceId}
+          currentMicId={localStream?.getAudioTracks()[0]?.getSettings().deviceId}
+          noiseCancellationEnabled={isNoiseCancellationEnabled}
+          onToggleNoiseCancellation={toggleNoiseCancellation}
+          onDeviceChange={switchMediaDevice}
         />
 
         <main className="flex-1 w-full h-full relative z-10 flex flex-col pt-16 sm:pt-20 pb-24 sm:pb-28 px-2 sm:px-4 min-h-0 overflow-hidden">
@@ -716,14 +766,12 @@ const App = () => {
             userId={userId} 
             myUserName={username}
             peerNames={peerNames}
-          />
-          
-          <SettingsModal 
-            isOpen={showSettings}
-            onClose={() => setShowSettings(false)}
-            currentCameraId={localStream?.getVideoTracks()[0]?.getSettings().deviceId}
-            currentMicId={localStream?.getAudioTracks()[0]?.getSettings().deviceId}
-            onDeviceChange={switchMediaDevice}
+            onNewMessage={(senderName, text) => {
+              if (!showChat) {
+                const preview = text.length > 40 ? text.slice(0, 40) + '…' : text;
+                showToast(`💬 ${senderName}: ${preview}`);
+              }
+            }}
           />
         </main>
 
@@ -754,6 +802,7 @@ const App = () => {
           onLeave={leaveRoom}
           onReaction={handleReaction}
         />
+
       </div>
     );
   }
@@ -762,7 +811,7 @@ const App = () => {
   if (mode === 'preview') {
       return (
         <div className="min-h-screen bg-black flex items-center justify-center p-4">
-             <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-[22px] p-8 shadow-[0_18px_40px_rgba(0,0,0,0.35)] space-y-8">
+             <div className="w-full max-w-2xl bg-[#09090b] border border-zinc-800 rounded-[30px] p-8 shadow-[0_25px_70px_rgba(0,0,0,0.95)] space-y-8">
                 <div className="text-center space-y-2">
                     <h2 className="text-2xl font-bold text-white tracking-tight">Ready to join, {username}?</h2>
                     <p className="text-zinc-500">
@@ -803,7 +852,7 @@ const App = () => {
   if (mode === 'left') {
       return (
           <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-              <div className="max-w-md w-full bg-zinc-900 border border-zinc-700 rounded-[22px] p-8 text-center space-y-6 shadow-[0_18px_40px_rgba(0,0,0,0.35)] animate-in fade-in zoom-in duration-300">
+              <div className="max-w-md w-full bg-[#09090b] border border-zinc-800 rounded-[30px] p-8 text-center space-y-6 shadow-[0_25px_70px_rgba(0,0,0,0.95)] animate-in fade-in zoom-in duration-300">
                   <div className="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
                       <VideoOff className="w-8 h-8 text-zinc-500" />
                   </div>
@@ -864,7 +913,7 @@ const App = () => {
         )}
 
         {/* Action Card */}
-        <section className="max-w-md mx-auto bg-zinc-900 border border-zinc-700 rounded-[22px] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.3)] transition-all hover:border-zinc-600">
+        <section className="max-w-md mx-auto bg-[#09090b] border border-zinc-800 rounded-[30px] p-2 shadow-[0_25px_70px_rgba(0,0,0,0.95)] transition-all hover:border-zinc-700">
           
           {mode === 'home' && (
              <div className="p-6 space-y-4">
