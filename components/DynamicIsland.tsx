@@ -11,6 +11,7 @@ interface DynamicIslandProps {
   isRecording?: boolean;
   recordingDuration?: number;
   handRaiseCount?: number;
+  meetingStartedAt?: number;
   onCopyInvite?: () => void;
 }
 
@@ -22,6 +23,7 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
   isRecording = false,
   recordingDuration = 0,
   handRaiseCount = 0,
+  meetingStartedAt,
   onCopyInvite
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -31,7 +33,12 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
   const [packetLoss, setPacketLoss] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => setTimer(t => t + 1), 1000);
+    const startedAt = meetingStartedAt ?? Date.now();
+    const updateTimer = () => {
+      setTimer(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
     
     // Ping/Latency Check
     const pingInterval = setInterval(async () => {
@@ -49,7 +56,7 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
       clearInterval(interval);
       clearInterval(pingInterval);
     };
-  }, []);
+  }, [meetingStartedAt]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -99,13 +106,13 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
     >
       <div
         className={`
-          relative max-w-[calc(100vw-1rem)] bg-zinc-950/80 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.6),inset_0_1px_1px_0_rgba(255,255,255,0.15)] rounded-full
+          relative max-w-[calc(100vw-1rem)] bg-zinc-900 border border-zinc-700 shadow-[0_10px_28px_rgba(0,0,0,0.4)] rounded-2xl
           transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] overflow-hidden
           ${isExpanded 
-            ? 'w-[min(540px,calc(100vw-1rem))] h-[64px]'
+            ? 'w-[min(540px,calc(100vw-1rem))] h-[68px]'
             : isRecording || handRaiseCount > 0
-            ? 'w-[200px] h-[34px]' 
-            : 'w-[130px] h-[32px]'
+            ? 'w-[210px] h-[40px]'
+            : 'w-[148px] h-[38px]'
           }
         `}
       >
@@ -143,7 +150,7 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
         >
           {/* Left: Time & Recording */}
           <div className="flex items-center gap-2.5 min-w-[110px]">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border bg-black/40 border-white/10">
+             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl border bg-zinc-800 border-zinc-700">
               <span className="text-xs font-mono text-zinc-300">{formatTime(timer)}</span>
             </div>
             {isRecording && (
@@ -157,7 +164,7 @@ const DynamicIsland: React.FC<DynamicIslandProps> = ({
           {/* Center: Room Code & 1-Click Copy */}
           <div 
             onClick={copyRoomId}
-            className="flex flex-col items-center cursor-pointer group px-4 py-1 rounded-xl hover:bg-white/5 transition-colors"
+             className="flex flex-col items-center cursor-pointer group px-4 py-1 rounded-xl hover:bg-zinc-800 transition-colors"
             title="Click to copy invite link"
           >
             <div className="flex items-center gap-2">

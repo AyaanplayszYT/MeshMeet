@@ -82,7 +82,8 @@ const getRoomSettings = (roomId: string) => {
   return {
     isLocked: meta?.isLocked || false,
     waitingRoom: meta?.waitingRoom || false,
-    hostId: meta?.hostId
+    hostId: meta?.hostId,
+    startedAt: meta?.createdAt
   };
 };
 

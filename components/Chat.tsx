@@ -68,13 +68,13 @@ const Chat: React.FC<ChatProps> = ({ isOpen, onClose, roomId, userId, peerNames,
   return (
     <div 
       className={`absolute top-20 bottom-24 right-6 w-[360px] max-w-[calc(100vw-48px)] z-40 flex flex-col 
-        bg-zinc-950/90 backdrop-blur-2xl border border-zinc-800 rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] 
+        bg-zinc-900 border border-zinc-700 rounded-[22px] shadow-[0_16px_36px_rgba(0,0,0,0.45)]
         transform transition-all duration-500 cubic-bezier(0.16, 1, 0.3, 1) origin-right
         ${isOpen ? 'translate-x-0 opacity-100 scale-100' : 'translate-x-[20px] opacity-0 scale-95 pointer-events-none'}
       `}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-5 border-b border-white/5 bg-white/5 rounded-t-3xl">
+      <div className="flex items-center justify-between p-5 border-b border-zinc-800 bg-zinc-900 rounded-t-[22px]">
         <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-500/10 rounded-xl">
                 <MessageSquare className="w-5 h-5 text-blue-400" />
@@ -136,7 +136,7 @@ const Chat: React.FC<ChatProps> = ({ isOpen, onClose, roomId, userId, peerNames,
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-white/5 bg-zinc-900/30 rounded-b-3xl">
+      <div className="p-4 border-t border-zinc-800 bg-zinc-900 rounded-b-[22px]">
         <form onSubmit={handleSend} className="relative flex items-center">
           <input
             type="text"

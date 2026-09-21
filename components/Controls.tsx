@@ -59,12 +59,12 @@ const ControlButton: React.FC<{
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={`p-3 rounded-2xl transition-all duration-200 transform active:scale-95 flex items-center justify-center ${
+      className={`p-3 rounded-xl transition-all duration-200 transform active:scale-95 flex items-center justify-center ${
         active 
           ? 'bg-white text-black shadow-lg shadow-white/20 border border-white'
           : danger
           ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 shadow-lg shadow-rose-500/10'
-          : 'bg-white/[0.06] text-zinc-300 hover:bg-white/[0.14] hover:text-white border border-white/10 hover:border-white/20 backdrop-blur-md'
+           : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-zinc-700 hover:border-zinc-600'
       } ${className}`}
     >
       {children}
@@ -117,11 +117,11 @@ export const Controls: React.FC<ControlsProps> = ({
   };
 
   return (
-    <div className="fixed bottom-5 left-1/2 transform -translate-x-1/2 flex items-center gap-3 z-50">
+    <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-3 z-50 max-w-[calc(100vw-1rem)]">
       
       {/* Reaction Popover */}
       {showReactions && (
-        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-zinc-950/90 backdrop-blur-2xl border border-white/15 ring-1 ring-white/10 rounded-2xl p-2 flex gap-2 shadow-2xl animate-in slide-in-from-bottom-4 fade-in duration-150">
+        <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 bg-zinc-900 border border-zinc-700 rounded-xl p-2 flex gap-2 shadow-xl animate-in slide-in-from-bottom-4 fade-in duration-150">
           {['❤️', '👍', '😂', '🎉', '🔥', '👏'].map((emoji) => (
             <button 
               key={emoji}
@@ -136,7 +136,7 @@ export const Controls: React.FC<ControlsProps> = ({
       )}
 
       {/* Main Glass Control Dock */}
-      <div className="flex items-center gap-1.5 sm:gap-2 bg-zinc-950/75 backdrop-blur-3xl p-2 sm:p-2.5 rounded-3xl border border-white/15 ring-1 ring-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.7),inset_0_1px_1px_0_rgba(255,255,255,0.15)]">
+      <div className="flex max-w-full items-center gap-1.5 sm:gap-2 overflow-x-auto bg-zinc-900 p-1.5 sm:p-2 rounded-[22px] border border-zinc-700 shadow-[0_14px_36px_rgba(0,0,0,0.45)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         
         {/* Mute Mic */}
         <ControlButton

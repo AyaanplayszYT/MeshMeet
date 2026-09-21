@@ -616,12 +616,12 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
 
   // Outer container styling depending on mode
   const containerClasses = mode === 'stage'
-    ? "w-full h-full relative bg-zinc-950/90 backdrop-blur-2xl border border-white/15 rounded-3xl overflow-hidden flex flex-col shadow-2xl"
-    : "fixed top-16 bottom-24 inset-x-3 sm:inset-x-8 md:inset-x-16 max-w-4xl mx-auto z-40 bg-zinc-950/95 backdrop-blur-3xl border border-white/15 ring-1 ring-white/10 rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200";
+    ? "w-full h-full relative bg-zinc-900 border border-zinc-700 rounded-[26px] overflow-hidden flex flex-col shadow-[0_16px_36px_rgba(0,0,0,0.35)]"
+    : "fixed top-16 bottom-24 inset-x-3 sm:inset-x-8 md:inset-x-16 max-w-4xl mx-auto z-40 bg-zinc-900 border border-zinc-700 rounded-[26px] shadow-[0_20px_55px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200";
 
   return (
     <div className={containerClasses}>
-      <div className="h-12 shrink-0 flex items-center justify-between gap-3 px-4 border-b border-zinc-800 bg-zinc-900/80">
+      <div className="h-14 shrink-0 flex items-center justify-between gap-3 px-4 sm:px-5 border-b border-zinc-800 bg-zinc-900">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white truncate">Collaborative whiteboard</h2>
           <p className="text-[10px] text-zinc-500 truncate">Draw, add notes, and share ideas with everyone</p>
@@ -631,9 +631,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
         </span>
       </div>
 
-      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0">
+      <div ref={containerRef} className="relative flex-1 min-h-0 min-w-0 bg-zinc-950/55">
       {/* Sleek Floating Glass Toolbar */}
-      <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-zinc-900/95 backdrop-blur-2xl border border-white/15 ring-1 ring-white/10 rounded-2xl p-1.5 sm:p-2 flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.7)] z-30 max-w-[calc(100%-1rem)]">
+      <div className="absolute top-3 left-1/2 transform -translate-x-1/2 bg-zinc-900 border border-zinc-700 rounded-xl p-1.5 sm:p-2 flex flex-wrap items-center justify-center gap-1 sm:gap-1.5 shadow-lg z-30 max-w-[calc(100%-1rem)]">
         
         {/* Tool Selector */}
         <div className="flex items-center gap-0.5 sm:gap-1 pr-1.5 border-r border-white/10">
@@ -783,14 +783,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
       </div>
 
       {/* Synced Collaborative Sticky Notes Layer */}
-      <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden p-1">
         {notes.map(note => {
           const colorMeta = NOTE_COLORS.find(c => c.key === note.color) || NOTE_COLORS[0];
           return (
             <div
               key={note.id}
               style={{ left: `${note.x}%`, top: `${note.y}%` }}
-              className={`absolute w-44 sm:w-48 p-3 rounded-2xl shadow-2xl backdrop-blur-xl border ${colorMeta.border} ${colorMeta.bg} ${colorMeta.text} pointer-events-auto cursor-grab active:cursor-grabbing transition-shadow select-none animate-in fade-in zoom-in-90 duration-150`}
+              className={`absolute w-44 sm:w-48 p-3 rounded-xl shadow-xl border ${colorMeta.border} ${colorMeta.bg} ${colorMeta.text} pointer-events-auto cursor-grab active:cursor-grabbing transition-shadow select-none animate-in fade-in zoom-in-90 duration-150`}
               onMouseDown={(e) => handleNoteDragStart(e, note)}
               onTouchStart={(e) => handleNoteDragStart(e, note)}
             >

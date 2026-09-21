@@ -36,6 +36,7 @@ const App = () => {
   // Host & Room Settings State
   const [isHost, setIsHost] = useState(false);
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({ isLocked: false, waitingRoom: false });
+  const [meetingStartedAt, setMeetingStartedAt] = useState<number | undefined>();
   const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
   const [showHostControls, setShowHostControls] = useState(false);
 
@@ -119,6 +120,7 @@ const App = () => {
     signaling.on('room-joined', (payload: { roomId: string; isHost: boolean; settings: RoomSettings }) => {
       setIsHost(payload.isHost);
       setRoomSettings(payload.settings);
+      setMeetingStartedAt(payload.settings.startedAt);
       setMode('room');
     });
     
@@ -134,6 +136,7 @@ const App = () => {
     signaling.on('admitted', (payload: { roomId: string; isHost: boolean; settings: RoomSettings }) => {
       setIsHost(payload.isHost);
       setRoomSettings(payload.settings);
+      setMeetingStartedAt(payload.settings.startedAt);
       setMode('room');
     });
     
@@ -503,6 +506,7 @@ const App = () => {
       setIsPublic(false);
       setWaitingRoomEnabled(false);
       setIsHost(false);
+      setMeetingStartedAt(undefined);
       setWaitingUsers([]);
   };
 
@@ -510,7 +514,7 @@ const App = () => {
   if (mode === 'waiting') {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-zinc-900/40 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 backdrop-blur-xl shadow-2xl">
+        <div className="max-w-md w-full bg-zinc-900 border border-zinc-700 rounded-[22px] p-8 text-center space-y-6 shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
           <div className="w-20 h-20 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
             <Clock className="w-10 h-10 text-amber-400 animate-pulse" />
           </div>
@@ -539,7 +543,7 @@ const App = () => {
   if (mode === 'denied') {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-        <div className="max-w-md w-full bg-zinc-900/40 border border-rose-900/30 rounded-3xl p-8 text-center space-y-6 backdrop-blur-xl shadow-2xl">
+        <div className="max-w-md w-full bg-zinc-900 border border-rose-900/50 rounded-[22px] p-8 text-center space-y-6 shadow-[0_18px_40px_rgba(0,0,0,0.35)]">
           <div className="w-20 h-20 bg-rose-500/10 border border-rose-500/20 rounded-full flex items-center justify-center mx-auto mb-2">
             <X className="w-10 h-10 text-rose-500" />
           </div>
@@ -574,6 +578,7 @@ const App = () => {
         <DynamicIsland 
           roomId={roomId}
           participantCount={(1) + remoteStreams.size}
+          meetingStartedAt={meetingStartedAt}
           isMuted={isMuted}
           isVideoStopped={isVideoStopped}
           isRecording={isRecording}
@@ -632,7 +637,7 @@ const App = () => {
               </div>
 
               {/* Side Participant Video strip */}
-              <div className="h-36 sm:h-44 lg:h-full lg:w-72 xl:w-80 shrink-0 min-h-0 overflow-y-auto overflow-x-auto bg-zinc-950/40 backdrop-blur-xl rounded-3xl p-2 border border-white/10 flex items-center justify-center">
+              <div className="h-36 sm:h-44 lg:h-full lg:w-72 xl:w-80 shrink-0 min-h-0 overflow-y-auto overflow-x-auto bg-zinc-900 rounded-[22px] p-2 border border-zinc-700 flex items-center justify-center shadow-[0_12px_28px_rgba(0,0,0,0.25)]">
                 {activeStream && (
                   <VideoGrid 
                     localStream={activeStream} 
@@ -757,7 +762,7 @@ const App = () => {
   if (mode === 'preview') {
       return (
         <div className="min-h-screen bg-black flex items-center justify-center p-4">
-             <div className="w-full max-w-2xl bg-zinc-900/50 backdrop-blur-3xl border border-zinc-800 rounded-[32px] p-8 shadow-2xl space-y-8">
+             <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-700 rounded-[22px] p-8 shadow-[0_18px_40px_rgba(0,0,0,0.35)] space-y-8">
                 <div className="text-center space-y-2">
                     <h2 className="text-2xl font-bold text-white tracking-tight">Ready to join, {username}?</h2>
                     <p className="text-zinc-500">
@@ -798,7 +803,7 @@ const App = () => {
   if (mode === 'left') {
       return (
           <div className="min-h-screen bg-black flex flex-col items-center justify-center p-4">
-              <div className="max-w-md w-full bg-zinc-900/30 border border-zinc-800 rounded-3xl p-8 text-center space-y-6 backdrop-blur-xl animate-in fade-in zoom-in duration-300">
+              <div className="max-w-md w-full bg-zinc-900 border border-zinc-700 rounded-[22px] p-8 text-center space-y-6 shadow-[0_18px_40px_rgba(0,0,0,0.35)] animate-in fade-in zoom-in duration-300">
                   <div className="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4">
                       <VideoOff className="w-8 h-8 text-zinc-500" />
                   </div>
@@ -859,7 +864,7 @@ const App = () => {
         )}
 
         {/* Action Card */}
-        <section className="max-w-md mx-auto bg-zinc-900/40 backdrop-blur-2xl border border-zinc-800/80 rounded-[32px] p-2 shadow-2xl transition-all hover:border-zinc-700/60">
+        <section className="max-w-md mx-auto bg-zinc-900 border border-zinc-700 rounded-[22px] p-2 shadow-[0_18px_38px_rgba(0,0,0,0.3)] transition-all hover:border-zinc-600">
           
           {mode === 'home' && (
              <div className="p-6 space-y-4">

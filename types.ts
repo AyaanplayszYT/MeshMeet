@@ -40,6 +40,7 @@ export interface RoomSettings {
   isLocked: boolean;
   waitingRoom: boolean;
   hostId?: string;
+  startedAt?: number;
 }
 
 export interface WaitingUser {

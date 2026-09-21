@@ -184,14 +184,14 @@ const VideoTile: React.FC<VideoTileProps> = ({
 
   return (
     <div 
-      className={`relative w-full h-full bg-zinc-950 rounded-2xl overflow-hidden transition-all duration-300 group
+      className={`relative w-full h-full p-1.5 bg-zinc-900 rounded-[22px] overflow-hidden transition-all duration-300 group
         ${isSpeaking && !muted
           ? 'border-2 border-emerald-400 shadow-[0_0_30px_rgba(52,211,153,0.35)] ring-2 ring-emerald-500/40' 
           : isPinned
           ? 'border-2 border-blue-500 shadow-[0_0_25px_rgba(59,130,246,0.3)]'
           : isHandRaised
           ? 'border-2 border-amber-500/80 shadow-[0_0_25px_rgba(245,158,11,0.3)]'
-          : 'border border-white/10 shadow-xl'
+           : 'border border-zinc-700 shadow-[0_12px_28px_rgba(0,0,0,0.28)]'
         }
       `}
     >
@@ -200,11 +200,11 @@ const VideoTile: React.FC<VideoTileProps> = ({
         autoPlay
         playsInline
         muted={isLocal || muted}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${isLocal && !isScreenShare ? 'scale-x-[-1]' : ''} ${!showVideo ? 'opacity-0' : 'opacity-100'}`}
+        className={`w-full h-full rounded-[17px] object-cover transition-opacity duration-300 ${isLocal && !isScreenShare ? 'scale-x-[-1]' : ''} ${!showVideo ? 'opacity-0' : 'opacity-100'}`}
       />
       
       {!showVideo && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/95 backdrop-blur-md">
+        <div className="absolute inset-1.5 flex items-center justify-center rounded-[17px] bg-zinc-950/95">
           <div className={`${isCompact ? 'w-12 h-12 text-base' : 'w-20 h-20 text-2xl'} rounded-full bg-zinc-800/90 border border-white/10 flex items-center justify-center font-bold text-white shadow-inner`}>
             {(userName || (isLocal ? 'You' : 'Peer')).charAt(0).toUpperCase()}
           </div>
@@ -230,14 +230,14 @@ const VideoTile: React.FC<VideoTileProps> = ({
       {/* Top Left Badges (Screen Share, Hand Raised) */}
       <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
         {isScreenShare && (
-          <div className="px-2 py-1 bg-blue-600/30 backdrop-blur-md border border-blue-500/40 rounded-lg flex items-center gap-1.5 shadow-md">
+          <div className="px-2 py-1 bg-zinc-900/90 border border-blue-500/50 rounded-lg flex items-center gap-1.5 shadow-md">
             <MonitorUp className="w-3 h-3 text-blue-400" />
             <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wide">Presenting</span>
           </div>
         )}
 
         {isHandRaised && (
-          <div className="px-2 py-1 bg-amber-500/25 backdrop-blur-md border border-amber-500/40 rounded-lg flex items-center gap-1.5 shadow-md animate-bounce">
+          <div className="px-2 py-1 bg-zinc-900/90 border border-amber-500/50 rounded-lg flex items-center gap-1.5 shadow-md animate-bounce">
             <span className="text-xs">✋</span>
             <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wide">Hand Raised</span>
           </div>
@@ -255,7 +255,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
             className={`p-1.5 rounded-full backdrop-blur-md border transition-all ${
               isPinned
                 ? 'bg-blue-600 text-white border-blue-400 shadow-lg'
-                : 'bg-black/50 text-zinc-300 border-white/15 hover:bg-black/80 hover:text-white'
+               : 'bg-zinc-900/90 text-zinc-300 border-zinc-700 hover:bg-zinc-800 hover:text-white'
             }`}
             title={isPinned ? 'Unpin participant' : 'Pin participant'}
           >
@@ -266,7 +266,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
         {/* Network Stats Indicator (Only for remote peers) */}
         {!isLocal && stats && (
           <div className="group/stats relative">
-            <div className="p-1.5 rounded-full bg-black/50 backdrop-blur-md border border-white/15 hover:bg-black/80 transition-colors cursor-help">
+             <div className="p-1.5 rounded-lg bg-zinc-900/90 border border-zinc-700 hover:bg-zinc-800 transition-colors cursor-help">
               <StatsIcon />
             </div>
             
@@ -298,7 +298,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
       {/* Live Captions Overlay */}
       {caption && (
         <div className="absolute bottom-12 left-1/2 transform -translate-x-1/2 w-[90%] pointer-events-none flex justify-center z-30">
-          <div className="bg-black/75 backdrop-blur-md px-4 py-2 rounded-xl text-center border border-white/15 shadow-lg animate-in slide-in-from-bottom-2 fade-in duration-200">
+             <div className="bg-zinc-900/95 px-4 py-2 rounded-xl text-center border border-zinc-700 shadow-lg animate-in slide-in-from-bottom-2 fade-in duration-200">
             <p className="text-white text-sm md:text-base font-medium leading-snug drop-shadow-md">
               {caption}
             </p>
@@ -308,7 +308,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
 
       {/* Glass Name Tag & Audio Visualizer */}
       <div className={`absolute left-3 flex items-center gap-2 max-w-[80%] ${isCompact ? 'bottom-2 left-2' : 'bottom-3 left-3'}`}>
-        <div className={`bg-zinc-950/60 backdrop-blur-md rounded-full border border-white/15 flex items-center gap-2 shadow-sm ${isCompact ? 'px-2 py-1' : 'px-3 py-1.5'}`}>
+         <div className={`bg-zinc-900/95 rounded-xl border border-zinc-700 flex items-center gap-2 shadow-md ${isCompact ? 'px-2 py-1' : 'px-3 py-1.5'}`}>
           {!muted && (
             <div className={`flex items-end gap-[2px] ${isCompact ? 'h-2 w-2' : 'h-3 w-3'}`}>
               <div className="w-[3px] bg-emerald-400 rounded-full transition-all duration-100" style={{ height: `${Math.max(20, audioLevel)}%` }}></div>
