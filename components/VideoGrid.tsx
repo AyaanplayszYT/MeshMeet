@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MicOff, Signal, SignalMedium, SignalLow, Activity, MonitorUp, Pin, PinOff } from 'lucide-react';
+import { MicOff, Signal, SignalMedium, SignalLow, Activity, Pin, PinOff } from 'lucide-react';
 import { signaling } from '../services/socket';
 import { Reaction, ConnectionStats } from '../types';
 
@@ -200,7 +200,7 @@ const VideoTile: React.FC<VideoTileProps> = ({
         autoPlay
         playsInline
         muted={isLocal || muted}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${isLocal && !isScreenShare ? 'scale-x-[-1]' : ''} ${!showVideo ? 'opacity-0' : 'opacity-100'}`}
+        className={`w-full h-full ${isScreenShare ? 'object-contain bg-black' : 'object-cover'} transition-opacity duration-300 ${isLocal && !isScreenShare ? 'scale-x-[-1]' : ''} ${!showVideo ? 'opacity-0' : 'opacity-100'}`}
       />
       
       {!showVideo && (
@@ -227,15 +227,8 @@ const VideoTile: React.FC<VideoTileProps> = ({
         ))}
       </div>
 
-      {/* Top Left Badges (Screen Share, Hand Raised) */}
+      {/* Top Left Badge (Hand Raised) */}
       <div className="absolute top-3 left-3 flex items-center gap-2 z-20">
-        {isScreenShare && (
-          <div className="px-2 py-1 bg-blue-600/30 backdrop-blur-md border border-blue-500/40 rounded-lg flex items-center gap-1.5 shadow-md">
-            <MonitorUp className="w-3 h-3 text-blue-400" />
-            <span className="text-[10px] font-bold text-blue-300 uppercase tracking-wide">Presenting</span>
-          </div>
-        )}
-
         {isHandRaised && (
           <div className="px-2 py-1 bg-amber-500/25 backdrop-blur-md border border-amber-500/40 rounded-lg flex items-center gap-1.5 shadow-md animate-bounce">
             <span className="text-xs">✋</span>
@@ -338,7 +331,7 @@ interface VideoGridProps {
   peerNames?: Map<string, string>;
   peerScreenShares?: Map<string, boolean>;
   peerScreenStreams?: Map<string, MediaStream>;
-  isLocalScreenShare?: boolean;
+  localScreenStream?: MediaStream | null;
   raisedHands?: Set<string>;
   localIsMuted?: boolean;
   localIsVideoStopped?: boolean;
@@ -355,7 +348,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({
   peerNames,
   peerScreenShares,
   peerScreenStreams,
-  isLocalScreenShare,
+  localScreenStream,
   raisedHands,
   localIsMuted = false,
   localIsVideoStopped = false,
@@ -370,24 +363,45 @@ const VideoGrid: React.FC<VideoGridProps> = ({
       isLocal: true, 
       stats: undefined, 
       userName: myUserName,
-      isScreenShare: isLocalScreenShare,
+      isScreenShare: false,
       isMuted: localIsMuted,
       isVideoStopped: localIsVideoStopped
     }] : []),
+    ...(localScreenStream ? [{
+      id: `${myUserId}-screen`,
+      stream: localScreenStream,
+      isLocal: true,
+      stats: undefined,
+      userName: `${myUserName || 'You'}'s screen`,
+      isScreenShare: true,
+      isMuted: true,
+      isVideoStopped: false
+    }] : []),
     ...Array.from(remoteStreams.entries()).map(([id, stream]) => {
       const media = peerMediaStates?.get(id);
-      const isScreenShare = peerScreenShares?.get(id);
       return { 
         id, 
-        stream: isScreenShare ? (peerScreenStreams?.get(id) || stream) : stream,
+        stream,
         isLocal: false,
         stats: connectionStats?.get(id),
         userName: peerNames?.get(id),
-        isScreenShare,
+        isScreenShare: false,
         isMuted: media !== undefined ? media.isMuted : (stream.getAudioTracks().length === 0 || !stream.getAudioTracks()[0]?.enabled),
         isVideoStopped: media !== undefined ? media.isVideoStopped : (stream.getVideoTracks().length === 0 || !stream.getVideoTracks()[0]?.enabled)
       };
-    })
+    }),
+    ...Array.from(peerScreenStreams?.entries() || [])
+      .filter(([id]) => peerScreenShares?.get(id))
+      .map(([id, stream]) => ({
+        id: `${id}-screen`,
+        stream,
+        isLocal: false,
+        stats: connectionStats?.get(id),
+        userName: `${peerNames?.get(id) || 'Participant'}'s screen`,
+        isScreenShare: true,
+        isMuted: true,
+        isVideoStopped: false
+      }))
   ];
   
   const count = streams.length;
@@ -408,6 +422,12 @@ const VideoGrid: React.FC<VideoGridProps> = ({
     setPinnedPeerId(prev => (prev === id ? null : id));
   };
 
+  const getAspectRatio = (stream: MediaStream) => {
+    const track = stream.getVideoTracks()[0];
+    const settings = track?.getSettings();
+    return settings?.width && settings?.height ? settings.width / settings.height : 16 / 9;
+  };
+
   // Spotlight Layout (either Pinned participant or Screen Share)
   if (spotlightStream && count > 1) {
     const otherStreams = streams.filter(s => s.id !== spotlightStream.id);
@@ -416,7 +436,10 @@ const VideoGrid: React.FC<VideoGridProps> = ({
       <div className="w-full h-full flex flex-col md:flex-row gap-3 md:gap-4 overflow-hidden p-2 items-center justify-center">
         {/* Main stage spotlight area */}
         <div className="flex-1 min-h-0 min-w-0 w-full h-full flex items-center justify-center">
-          <div className="w-full max-h-full aspect-video flex items-center justify-center relative">
+          <div
+            className="w-full max-w-full max-h-full flex items-center justify-center relative"
+            style={{ aspectRatio: getAspectRatio(spotlightStream.stream) }}
+          >
             <VideoTile 
               stream={spotlightStream.stream} 
               isLocal={spotlightStream.isLocal} 

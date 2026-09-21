@@ -750,7 +750,7 @@ const App = () => {
               <div className="h-36 sm:h-44 lg:h-full lg:w-72 xl:w-80 shrink-0 min-h-0 overflow-y-auto overflow-x-auto bg-zinc-900 rounded-[22px] p-2 border border-zinc-700 flex items-center justify-center shadow-[0_12px_28px_rgba(0,0,0,0.25)]">
                 {activeStream && (
                   <VideoGrid 
-                    localStream={activeStream} 
+                    localStream={finalStream}
                     remoteStreams={remoteStreams} 
                     myUserId={userId}
                     myUserName={username}
@@ -758,7 +758,7 @@ const App = () => {
                     connectionStats={connectionStats}
                     peerScreenShares={peerScreenShares}
                     peerScreenStreams={peerScreenStreams}
-                    isLocalScreenShare={!!screenStream}
+                    localScreenStream={screenStream}
                     raisedHands={raisedHands}
                     localIsMuted={isMuted}
                     localIsVideoStopped={isVideoStopped}
@@ -771,7 +771,7 @@ const App = () => {
             <>
               {activeStream ? (
                 <VideoGrid 
-                  localStream={activeStream} 
+                  localStream={finalStream}
                   remoteStreams={remoteStreams} 
                   myUserId={userId}
                   myUserName={username}
@@ -779,7 +779,7 @@ const App = () => {
                   connectionStats={connectionStats}
                   peerScreenShares={peerScreenShares}
                   peerScreenStreams={peerScreenStreams}
-                  isLocalScreenShare={!!screenStream}
+                  localScreenStream={screenStream}
                   raisedHands={raisedHands}
                   localIsMuted={isMuted}
                   localIsVideoStopped={isVideoStopped}
