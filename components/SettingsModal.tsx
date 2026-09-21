@@ -274,7 +274,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const activeDeviceName = activeTab === 'audio' ? selectedMicName : selectedCameraName;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6 pb-28 sm:pb-32 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-6 pb-28 sm:pb-32 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
       
       {/* Outer Card Container - Pure sleek black matching website aesthetic */}
       <div className="w-full max-w-xl max-h-[calc(100dvh-7rem)] sm:max-h-[calc(100dvh-8rem)] rounded-[30px] sm:rounded-[34px] p-5 sm:p-7 shadow-[0_25px_70px_rgba(0,0,0,0.95)] bg-[#09090b] border border-zinc-800 text-white flex flex-col relative overflow-visible">

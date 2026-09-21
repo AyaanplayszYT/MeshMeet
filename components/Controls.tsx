@@ -11,7 +11,7 @@ import {
   Settings, 
   PictureInPicture,
   Aperture,
-  Captions,
+  ShieldCheck,
   MonitorUp,
   Disc,
   Square,
@@ -23,7 +23,7 @@ interface ControlsProps {
   isVideoStopped: boolean;
   isScreenSharing: boolean;
   isBlurEnabled: boolean;
-  isCaptionsEnabled: boolean;
+  isHost: boolean;
   isHandRaised: boolean;
   isRecording: boolean;
   recordingDuration: number;
@@ -34,7 +34,7 @@ interface ControlsProps {
   onToggleVideo: () => void;
   onToggleScreenShare: () => void;
   onToggleBlur: () => void;
-  onToggleCaptions: () => void;
+  onOpenHostControls: () => void;
   onTogglePiP: () => void;
   onToggleRaiseHand: () => void;
   onToggleRecord: () => void;
@@ -82,7 +82,7 @@ export const Controls: React.FC<ControlsProps> = ({
   isVideoStopped,
   isScreenSharing,
   isBlurEnabled,
-  isCaptionsEnabled,
+  isHost,
   isHandRaised,
   isRecording,
   recordingDuration,
@@ -92,7 +92,7 @@ export const Controls: React.FC<ControlsProps> = ({
   onToggleVideo,
   onToggleScreenShare,
   onToggleBlur,
-  onToggleCaptions,
+  onOpenHostControls,
   onTogglePiP,
   onToggleRaiseHand,
   onToggleRecord,
@@ -199,15 +199,6 @@ export const Controls: React.FC<ControlsProps> = ({
           <Aperture className="w-5 h-5" />
         </ControlButton>
 
-        {/* Live Captions */}
-        <ControlButton
-          label={isCaptionsEnabled ? "Turn Off Live Captions" : "Live AI Captions"}
-          onClick={onToggleCaptions}
-          active={isCaptionsEnabled}
-        >
-          <Captions className="w-5 h-5" />
-        </ControlButton>
-
         {/* Copy Invite Link */}
         <ControlButton
           label="Copy 1-Click Invite Link"
@@ -223,6 +214,16 @@ export const Controls: React.FC<ControlsProps> = ({
         >
           <Settings className="w-5 h-5" />
         </ControlButton>
+
+        {isHost && (
+          <ControlButton
+            label="Host Controls"
+            onClick={onOpenHostControls}
+            active={false}
+          >
+            <ShieldCheck className="w-5 h-5 text-blue-400" />
+          </ControlButton>
+        )}
 
         {/* Picture in Picture */}
         <ControlButton

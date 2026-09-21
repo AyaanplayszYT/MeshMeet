@@ -63,6 +63,24 @@ const userToRoom = new Map<string, string>(); // odId -> roomId
 const userNames = new Map<string, string>(); // odId -> userName
 const whiteboardStates = new Map<string, WhiteboardState>();
 
+const getHostSocketId = (roomId: string) => {
+  const hostId = roomMetadata.get(roomId)?.hostId;
+  return Array.from(socketToUser.entries()).find(([_, userId]) => userId === hostId)?.[0];
+};
+
+const emitRoomParticipants = (roomId: string) => {
+  const meta = roomMetadata.get(roomId);
+  const hostSocketId = getHostSocketId(roomId);
+  if (!meta || !hostSocketId) return;
+
+  const participants = Array.from(rooms.get(roomId) || []).map((userId) => ({
+    userId,
+    userName: userNames.get(userId) || userId,
+    isHost: meta.hostId === userId
+  }));
+  io.to(hostSocketId).emit('room-participants', { participants });
+};
+
 const startTime = Date.now();
 
 // Helpers
@@ -302,6 +320,7 @@ io.on('connection', (socket: Socket) => {
 
     console.log(`[Room ${roomId}] User ${odId} joined. Total users: ${roomUsers?.size}`);
     broadcastPublicRooms();
+    emitRoomParticipants(roomId);
   });
 
   // Host admits user from waiting room
@@ -311,7 +330,7 @@ io.on('connection', (socket: Socket) => {
     const meta = roomMetadata.get(roomId);
     const roomUsers = rooms.get(roomId);
 
-    const isAuthorized = !meta || !meta.hostId || meta.hostId === hostUserId || (hostUserId && roomUsers && roomUsers.has(hostUserId));
+    const isAuthorized = !!meta && meta.hostId === hostUserId;
     if (!isAuthorized) {
       console.warn(`[Room ${roomId}] Unauthorized admit request from ${hostUserId}`);
       return;
@@ -352,6 +371,7 @@ io.on('connection', (socket: Socket) => {
       io.to(roomId).emit('waiting-room-update', updatedPayload);
 
       broadcastPublicRooms();
+      emitRoomParticipants(roomId);
     }
   });
 
@@ -362,7 +382,7 @@ io.on('connection', (socket: Socket) => {
     const meta = roomMetadata.get(roomId);
     const roomUsers = rooms.get(roomId);
 
-    const isAuthorized = !meta || !meta.hostId || meta.hostId === hostUserId || (hostUserId && roomUsers && roomUsers.has(hostUserId));
+    const isAuthorized = !!meta && meta.hostId === hostUserId;
     if (!isAuthorized) return;
 
     const waiting = waitingRooms.get(roomId);
@@ -411,6 +431,40 @@ io.on('connection', (socket: Socket) => {
     meta.waitingRoom = !meta.waitingRoom;
     console.log(`[Room ${roomId}] Waiting room toggled: ${meta.waitingRoom}`);
     io.to(roomId).emit('room-settings-update', getRoomSettings(roomId));
+    broadcastPublicRooms();
+  });
+
+  socket.on('get-room-participants', (payload: { roomId: string }) => {
+    const hostUserId = socketToUser.get(socket.id);
+    const meta = roomMetadata.get(payload.roomId);
+    if (meta?.hostId !== hostUserId) return;
+    emitRoomParticipants(payload.roomId);
+  });
+
+  socket.on('mute-user', (payload: { roomId: string; userId: string }) => {
+    const hostUserId = socketToUser.get(socket.id);
+    const meta = roomMetadata.get(payload.roomId);
+    if (meta?.hostId !== hostUserId || payload.userId === hostUserId) return;
+    const targetSocketId = Array.from(socketToUser.entries()).find(([_, userId]) => userId === payload.userId)?.[0];
+    if (targetSocketId) io.to(targetSocketId).emit('host-muted', { roomId: payload.roomId });
+  });
+
+  socket.on('kick-user', (payload: { roomId: string; userId: string }) => {
+    const hostUserId = socketToUser.get(socket.id);
+    const meta = roomMetadata.get(payload.roomId);
+    const roomUsers = rooms.get(payload.roomId);
+    if (meta?.hostId !== hostUserId || payload.userId === hostUserId || !roomUsers?.has(payload.userId)) return;
+
+    const targetSocketId = Array.from(socketToUser.entries()).find(([_, userId]) => userId === payload.userId)?.[0];
+    const targetSocket = targetSocketId ? io.sockets.sockets.get(targetSocketId) : undefined;
+    targetSocket?.emit('kicked', { roomId: payload.roomId });
+    targetSocket?.leave(payload.roomId);
+    roomUsers.delete(payload.userId);
+    if (targetSocketId) socketToUser.delete(targetSocketId);
+    userToRoom.delete(payload.userId);
+    userNames.delete(payload.userId);
+    socket.to(payload.roomId).emit('user-disconnected', payload.userId);
+    emitRoomParticipants(payload.roomId);
     broadcastPublicRooms();
   });
 
@@ -586,6 +640,7 @@ io.on('connection', (socket: Socket) => {
         }
         console.log(`[Room ${roomId}] Cleaned up (empty room)`);
       }
+      emitRoomParticipants(roomId);
     }
 
     socket.to(roomId).emit('user-disconnected', userId);
@@ -666,6 +721,7 @@ io.on('connection', (socket: Socket) => {
         }
         console.log(`[Room ${roomId}] Cleaned up after disconnect`);
       }
+      emitRoomParticipants(roomId);
 
       socket.to(roomId).emit('user-disconnected', odId);
       broadcastPublicRooms();

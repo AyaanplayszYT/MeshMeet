@@ -8,6 +8,7 @@ import {
   Copy, 
   CheckCheck, 
   UserX,
+  MicOff,
   Star,
   MoreVertical,
   Search,
@@ -23,7 +24,7 @@ import {
   Plus,
   ChevronDown
 } from 'lucide-react';
-import { RoomSettings, WaitingUser } from '../types';
+import { RoomParticipant, RoomSettings, WaitingUser } from '../types';
 
 interface HostControlsModalProps {
   isOpen: boolean;
@@ -31,11 +32,14 @@ interface HostControlsModalProps {
   roomId: string;
   roomSettings: RoomSettings;
   waitingUsers: WaitingUser[];
+  participants: RoomParticipant[];
   onToggleLock: () => void;
   onToggleWaitingRoom: () => void;
   onAdmitUser: (odId: string) => void;
   onDenyUser: (odId: string) => void;
   onAdmitAll?: () => void;
+  onMuteParticipant: (userId: string) => void;
+  onKickParticipant: (userId: string) => void;
 }
 
 export const HostControlsModal: React.FC<HostControlsModalProps> = ({
@@ -44,11 +48,14 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
   roomId,
   roomSettings,
   waitingUsers,
+  participants,
   onToggleLock,
   onToggleWaitingRoom,
   onAdmitUser,
   onDenyUser,
   onAdmitAll,
+  onMuteParticipant,
+  onKickParticipant,
 }) => {
   const [activeTab, setActiveTab] = useState<'access' | 'queue'>('access');
   const [admittingIds, setAdmittingIds] = useState<Set<string>>(new Set());
@@ -133,7 +140,7 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
       
       {/* Outer Card Container - Pure sleek black matching website aesthetic */}
       <div className="w-full max-w-xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] rounded-[30px] sm:rounded-[34px] p-5 sm:p-7 shadow-[0_25px_70px_rgba(0,0,0,0.95)] bg-[#09090b] border border-zinc-800 text-white flex flex-col relative overflow-visible">
@@ -470,6 +477,52 @@ export const HostControlsModal: React.FC<HostControlsModalProps> = ({
                   {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-zinc-400" />}
                   <span>{copied ? 'Copied' : 'Copy Invite'}</span>
                 </button>
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-zinc-200">Participants</span>
+                  <span className="text-[10px] text-zinc-500">Host only</span>
+                </div>
+                {participants.length === 0 ? (
+                  <p className="rounded-xl bg-zinc-900/60 border border-zinc-800 p-3 text-[11px] text-zinc-500">
+                    Participant list is loading...
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {participants.map((participant) => (
+                      <div key={participant.userId} className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-900/80 px-2.5 py-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="h-6 w-6 shrink-0 rounded-full bg-zinc-800 text-center text-[10px] leading-6 text-zinc-300">
+                            {participant.userName.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="truncate text-xs text-zinc-200">{participant.userName}</span>
+                          {participant.isHost && <span className="text-[9px] text-blue-400">Host</span>}
+                        </div>
+                        {!participant.isHost && (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => onMuteParticipant(participant.userId)}
+                              className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-1.5 text-amber-400 hover:bg-amber-500/20"
+                              title="Mute participant"
+                            >
+                              <MicOff className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onKickParticipant(participant.userId)}
+                              className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-1.5 text-rose-400 hover:bg-rose-500/20"
+                              title="Remove participant"
+                            >
+                              <UserX className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ) : (

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Video, Plus, ArrowRight, Loader2, Sparkles, Keyboard, ShieldCheck, Mic, MicOff, Video as VideoIcon, VideoOff, Users, Globe, Lock, RotateCcw, Home, Copyright, User as UserIcon, Wifi, WifiOff, DoorOpen, Check, X, Clock, Github, ScrollText, Radio } from 'lucide-react';
 import { useWebRTC } from './hooks/useWebRTC';
 import { useBackgroundBlur } from './hooks/useBackgroundBlur';
-import { useLiveCaptions } from './hooks/useLiveCaptions';
 import { useMeetingRecorder } from './hooks/useMeetingRecorder';
 import { sound } from './services/sound';
 import VideoGrid from './components/VideoGrid';
@@ -15,7 +14,7 @@ import Navbar from './components/Navbar';
 import PublicRoomsHub from './components/PublicRoomsHub';
 import HostControlsModal from './components/HostControlsModal';
 import { signaling } from './services/socket';
-import { Reaction, RoomInfo, RoomSettings, WaitingUser } from './types';
+import { Reaction, RoomInfo, RoomParticipant, RoomSettings, WaitingUser } from './types';
 
 const generateId = () => Math.random().toString(36).substr(2, 6);
 
@@ -38,6 +37,7 @@ const App = () => {
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({ isLocked: false, waitingRoom: false });
   const [meetingStartedAt, setMeetingStartedAt] = useState<number | undefined>();
   const [waitingUsers, setWaitingUsers] = useState<WaitingUser[]>([]);
+  const [roomParticipants, setRoomParticipants] = useState<RoomParticipant[]>([]);
   const [showHostControls, setShowHostControls] = useState(false);
 
   // Hand Raise & Recording State
@@ -54,9 +54,6 @@ const App = () => {
   // Blur Hook
   const { finalStream, isBlurEnabled, toggleBlur } = useBackgroundBlur(localStream);
   
-  // Live Captions Hook
-  const { captions, isCaptionsEnabled, toggleCaptions } = useLiveCaptions(roomId, userId);
-
   // Meeting Recording Hook (100% Client-side MediaRecorder)
   const { isRecording, recordingTime: recordingDuration, startRecording, stopRecording } = useMeetingRecorder();
 
@@ -72,6 +69,11 @@ const App = () => {
 
   // Preview Video Ref
   const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    localStreamRef.current = localStream;
+  }, [localStream]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -155,7 +157,8 @@ const App = () => {
        setIsHost(payload.isHost);
        setRoomSettings(payload.settings);
        setMeetingStartedAt(payload.startedAt ?? payload.settings.startedAt ?? Date.now());
-      setMode('room');
+       if (payload.isHost) signaling.emit('get-room-participants', { roomId: payload.roomId });
+       setMode('room');
     });
     
     signaling.on('room-locked', () => {
@@ -180,6 +183,25 @@ const App = () => {
     
     signaling.on('waiting-room-update', (payload: { roomId: string; waitingUsers: WaitingUser[] }) => {
       setWaitingUsers(payload.waitingUsers);
+    });
+
+    signaling.on('room-participants', (payload: { participants: RoomParticipant[] }) => {
+      setRoomParticipants(payload.participants);
+    });
+
+    signaling.on('host-muted', () => {
+      localStreamRef.current?.getAudioTracks().forEach(track => { track.enabled = false; });
+      setIsMuted(true);
+      showToast('The host muted your microphone');
+    });
+
+    signaling.on('kicked', () => {
+      localStreamRef.current?.getTracks().forEach(track => track.stop());
+      setLocalStream(null);
+      screenStream?.getTracks().forEach(track => track.stop());
+      setScreenStream(null);
+      setError('You were removed from the meeting by the host.');
+      setMode('home');
     });
     
     signaling.on('room-settings-update', (settings: RoomSettings) => {
@@ -250,6 +272,9 @@ const App = () => {
       signaling.off('admitted');
       signaling.off('denied');
       signaling.off('waiting-room-update');
+      signaling.off('room-participants');
+      signaling.off('host-muted');
+      signaling.off('kicked');
       signaling.off('room-settings-update');
       signaling.off('host-changed');
       signaling.off('room-closed');
@@ -364,6 +389,14 @@ const App = () => {
   
   const handleToggleWaitingRoom = () => {
     signaling.emit('toggle-waiting-room', { roomId });
+  };
+
+  const handleMuteParticipant = (participantId: string) => {
+    signaling.emit('mute-user', { roomId, userId: participantId });
+  };
+
+  const handleKickParticipant = (participantId: string) => {
+    signaling.emit('kick-user', { roomId, userId: participantId });
   };
 
   const activeStream = useMemo(() => {
@@ -655,11 +688,14 @@ const App = () => {
           roomId={roomId}
           roomSettings={roomSettings}
           waitingUsers={waitingUsers}
+          participants={roomParticipants}
           onToggleLock={handleToggleLock}
           onToggleWaitingRoom={handleToggleWaitingRoom}
           onAdmitUser={handleAdmitUser}
           onDenyUser={handleDenyUser}
           onAdmitAll={handleAdmitAll}
+          onMuteParticipant={handleMuteParticipant}
+          onKickParticipant={handleKickParticipant}
         />
 
         <SettingsModal
@@ -698,7 +734,6 @@ const App = () => {
                     myUserName={username}
                     peerNames={peerNames}
                     connectionStats={connectionStats}
-                    captions={captions}
                     peerScreenShares={peerScreenShares}
                     isLocalScreenShare={!!screenStream}
                     raisedHands={raisedHands}
@@ -719,7 +754,6 @@ const App = () => {
                   myUserName={username}
                   peerNames={peerNames}
                   connectionStats={connectionStats}
-                  captions={captions}
                   peerScreenShares={peerScreenShares}
                   isLocalScreenShare={!!screenStream}
                   raisedHands={raisedHands}
@@ -780,10 +814,10 @@ const App = () => {
         <Controls
           isMuted={isMuted}
           isVideoStopped={isVideoStopped}
-          isScreenSharing={!!screenStream}
-          isBlurEnabled={isBlurEnabled}
-          isCaptionsEnabled={isCaptionsEnabled}
-          isHandRaised={isHandRaised}
+           isScreenSharing={!!screenStream}
+           isBlurEnabled={isBlurEnabled}
+           isHost={isHost}
+           isHandRaised={isHandRaised}
           isRecording={isRecording}
           recordingDuration={recordingDuration}
           showChat={showChat}
@@ -792,8 +826,8 @@ const App = () => {
           onToggleMute={toggleMute}
           onToggleVideo={toggleVideo}
           onToggleScreenShare={toggleScreenShare}
-          onToggleBlur={toggleBlur}
-          onToggleCaptions={toggleCaptions}
+           onToggleBlur={toggleBlur}
+           onOpenHostControls={() => setShowHostControls(true)}
           onTogglePiP={togglePiP}
           onToggleRaiseHand={handleToggleRaiseHand}
           onToggleRecord={handleToggleRecord}
@@ -951,7 +985,7 @@ const App = () => {
                                 autoFocus
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="e.g. Ayaan"
+                                 placeholder="e.g. Your name"
                                 className="w-full bg-black/60 border border-zinc-700/80 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-all"
                             />
                         </div>
@@ -1050,7 +1084,7 @@ const App = () => {
                                 required
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                placeholder="e.g. Ayaan"
+                             placeholder="e.g. Your name"
                                 className="w-full bg-black/60 border border-zinc-700/80 rounded-2xl pl-11 pr-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/50 transition-all"
                             />
                         </div>

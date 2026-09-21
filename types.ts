@@ -48,6 +48,12 @@ export interface WaitingUser {
   userName: string;
 }
 
+export interface RoomParticipant {
+  userId: string;
+  userName: string;
+  isHost: boolean;
+}
+
 export interface ConnectionStats {
   rtt: number;              // Round Trip Time in ms
   jitter: number;           // Jitter in ms
@@ -134,6 +140,9 @@ export interface ServerToClientEvents {
   'room-closed': (payload: { roomId: string }) => void;
   'hand-raise-update': (payload: { userId: string; isRaised: boolean; userName: string }) => void;
   'peer-media-state': (payload: PeerMediaState) => void;
+  'room-participants': (payload: { participants: RoomParticipant[] }) => void;
+  'host-muted': (payload: { roomId: string }) => void;
+  'kicked': (payload: { roomId: string }) => void;
   'screen-share-state': (payload: { userId: string; isScreenShare: boolean }) => void;
 }
 
@@ -162,4 +171,7 @@ export interface ClientToServerEvents {
   'raise-hand': (payload: { roomId: string; userId: string; isRaised: boolean; userName: string }) => void;
   'peer-media-state': (payload: { roomId: string; isMuted: boolean; isVideoStopped: boolean }) => void;
   'screen-share-state': (payload: { roomId: string; isScreenShare: boolean }) => void;
+  'get-room-participants': (payload: { roomId: string }) => void;
+  'mute-user': (payload: { roomId: string; userId: string }) => void;
+  'kick-user': (payload: { roomId: string; userId: string }) => void;
 }
