@@ -185,6 +185,11 @@ const App = () => {
       setWaitingUsers(payload.waitingUsers);
     });
 
+    signaling.on('auth-error', (payload: { message: string }) => {
+      setError(payload.message);
+      setMode('home');
+    });
+
     signaling.on('room-participants', (payload: { participants: RoomParticipant[] }) => {
       setRoomParticipants(payload.participants);
     });
@@ -266,6 +271,7 @@ const App = () => {
       signaling.off('connect', onConnect);
       signaling.off('disconnect', onDisconnect);
       signaling.off('rooms-update');
+      signaling.off('auth-error');
       signaling.off('room-joined');
       signaling.off('room-locked');
       signaling.off('waiting-room');
@@ -414,7 +420,7 @@ const App = () => {
   }, [screenStream, finalStream, localStream]);
 
   const roomConfig = { isPublic, name: roomName, waitingRoom: waitingRoomEnabled };
-  const { remoteStreams, connectionStats, peerNames, peerScreenShares, peerMediaStates } = useWebRTC(
+  const { remoteStreams, connectionStats, peerNames, peerScreenShares, peerScreenStreams, peerMediaStates } = useWebRTC(
       mode === 'room' ? roomId : '', 
       userId, 
       username, 
@@ -470,15 +476,24 @@ const App = () => {
               // Keep microphone audio from the local stream; display audio is optional and
               // causes capture to fail in browsers that do not support system-audio sharing.
               const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+              const videoTrack = stream.getVideoTracks()[0];
+              if (!videoTrack) {
+                stream.getTracks().forEach(track => track.stop());
+                throw new Error('The browser returned no screen video track.');
+              }
               setScreenStream(stream);
-              stream.getVideoTracks()[0].onended = () => {
+              showToast('Screen sharing started');
+              videoTrack.onended = () => {
                   setScreenStream(null);
               };
           } catch (error: any) {
               console.error('Screen share failed', error);
-              if (error?.name !== 'AbortError' && error?.name !== 'NotAllowedError') {
-                showToast('Screen sharing could not start. Check browser permissions.');
-              }
+              const reason = error?.name === 'NotAllowedError'
+                ? 'Browser permission was denied.'
+                : error?.name === 'AbortError'
+                ? 'Screen sharing was cancelled.'
+                : 'Check browser permissions and HTTPS.';
+              showToast(`Screen sharing failed: ${reason}`);
           }
       }
   };
@@ -742,6 +757,7 @@ const App = () => {
                     peerNames={peerNames}
                     connectionStats={connectionStats}
                     peerScreenShares={peerScreenShares}
+                    peerScreenStreams={peerScreenStreams}
                     isLocalScreenShare={!!screenStream}
                     raisedHands={raisedHands}
                     localIsMuted={isMuted}
@@ -762,6 +778,7 @@ const App = () => {
                   peerNames={peerNames}
                   connectionStats={connectionStats}
                   peerScreenShares={peerScreenShares}
+                  peerScreenStreams={peerScreenStreams}
                   isLocalScreenShare={!!screenStream}
                   raisedHands={raisedHands}
                   localIsMuted={isMuted}

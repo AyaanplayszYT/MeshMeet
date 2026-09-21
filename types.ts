@@ -121,6 +121,7 @@ export interface ServerToClientEvents {
   'chat-message': (message: ChatMessage) => void;
   'reaction': (reaction: Reaction) => void;
   'room-full': () => void;
+  'auth-error': (payload: { message: string }) => void;
   'rooms-update': (rooms: RoomInfo[]) => void;
   'whiteboard-draw': (data: DrawLine) => void;
   'whiteboard-clear': () => void;
@@ -144,6 +145,9 @@ export interface ServerToClientEvents {
   'host-muted': (payload: { roomId: string }) => void;
   'kicked': (payload: { roomId: string }) => void;
   'screen-share-state': (payload: { userId: string; isScreenShare: boolean }) => void;
+  'screen-offer': (payload: { callerId: string; userName: string; offer: RTCSessionDescriptionInit }) => void;
+  'screen-answer': (payload: { callerId: string; answer: RTCSessionDescriptionInit }) => void;
+  'screen-ice-candidate': (payload: { callerId: string; candidate: RTCIceCandidateInit }) => void;
 }
 
 // Events that the client sends to the server
@@ -171,6 +175,9 @@ export interface ClientToServerEvents {
   'raise-hand': (payload: { roomId: string; userId: string; isRaised: boolean; userName: string }) => void;
   'peer-media-state': (payload: { roomId: string; isMuted: boolean; isVideoStopped: boolean }) => void;
   'screen-share-state': (payload: { roomId: string; isScreenShare: boolean }) => void;
+  'screen-offer': (payload: { targetUserId: string; userName: string; offer: RTCSessionDescriptionInit }) => void;
+  'screen-answer': (payload: { targetUserId: string; answer: RTCSessionDescriptionInit }) => void;
+  'screen-ice-candidate': (payload: { targetUserId: string; candidate: RTCIceCandidateInit }) => void;
   'get-room-participants': (payload: { roomId: string }) => void;
   'mute-user': (payload: { roomId: string; userId: string }) => void;
   'kick-user': (payload: { roomId: string; userId: string }) => void;

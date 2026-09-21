@@ -48,9 +48,11 @@ export const useWebRTC = (
   const [connectionStats, setConnectionStats] = useState<Map<string, ConnectionStats>>(new Map());
   const [peerNames, setPeerNames] = useState<Map<string, string>>(new Map());
   const [peerScreenShares, setPeerScreenShares] = useState<Map<string, boolean>>(new Map());
+  const [peerScreenStreams, setPeerScreenStreams] = useState<Map<string, MediaStream>>(new Map());
   const [peerMediaStates, setPeerMediaStates] = useState<Map<string, { isMuted: boolean; isVideoStopped: boolean }>>(new Map());
   
   const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const screenPeersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const isScreenShareRef = useRef<boolean>(isScreenShare);
   const isMutedRef = useRef<boolean>(isMuted);
@@ -96,6 +98,8 @@ export const useWebRTC = (
         } catch (err) {
           console.error('Error replacing video track', err);
         }
+      } else if (!videoSender && videoTrack) {
+        console.warn('No video sender found while switching local media');
       }
       if (audioSender && audioTrack && audioSender.track !== audioTrack) {
         try {
@@ -221,6 +225,68 @@ export const useWebRTC = (
     return pc;
   }, []);
 
+  const closeScreenPeer = useCallback((peerId: string) => {
+    const pc = screenPeersRef.current.get(peerId);
+    if (pc) pc.close();
+    screenPeersRef.current.delete(peerId);
+    setPeerScreenStreams(prev => {
+      const next = new Map(prev);
+      next.delete(peerId);
+      return next;
+    });
+  }, []);
+
+  const publishScreenShare = useCallback(async (targetUserId: string, track: MediaStreamTrack) => {
+    closeScreenPeer(targetUserId);
+    const pc = new RTCPeerConnection(STUN_SERVERS);
+    screenPeersRef.current.set(targetUserId, pc);
+    pc.addTrack(track, new MediaStream([track]));
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        signaling.emit('screen-ice-candidate', {
+          targetUserId,
+          candidate: event.candidate
+        });
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
+        closeScreenPeer(targetUserId);
+      }
+    };
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    signaling.emit('screen-offer', { targetUserId, userName, offer });
+  }, [closeScreenPeer, userName]);
+
+  const handleScreenOffer = useCallback(async (callerId: string, callerName: string, offer: RTCSessionDescriptionInit) => {
+    closeScreenPeer(callerId);
+    const pc = new RTCPeerConnection(STUN_SERVERS);
+    screenPeersRef.current.set(callerId, pc);
+    pc.ontrack = (event) => {
+      const stream = event.streams[0] || new MediaStream([event.track]);
+      setPeerScreenStreams(prev => new Map(prev).set(callerId, stream));
+      setPeerNames(prev => new Map(prev).set(callerId, callerName));
+    };
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        signaling.emit('screen-ice-candidate', {
+          targetUserId: callerId,
+          candidate: event.candidate
+        });
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
+        closeScreenPeer(callerId);
+      }
+    };
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    signaling.emit('screen-answer', { targetUserId: callerId, answer });
+  }, [closeScreenPeer]);
+
   const handleUserConnected = useCallback(async (newUserId: string) => {
     console.log('User connected:', newUserId);
     sound.playJoinChime();
@@ -323,6 +389,7 @@ export const useWebRTC = (
     console.log('User disconnected:', disconnectedUserId);
     sound.playLeaveChime();
     const pc = peersRef.current.get(disconnectedUserId);
+    closeScreenPeer(disconnectedUserId);
     if (pc) {
         pc.close();
         peersRef.current.delete(disconnectedUserId);
@@ -360,7 +427,19 @@ export const useWebRTC = (
         
         prevStatsRef.current.delete(disconnectedUserId);
     }
-  }, []);
+  }, [closeScreenPeer]);
+
+  useEffect(() => {
+    if (!roomId || !userId || !isScreenShare || !localStream) return;
+    const track = localStream.getVideoTracks()[0];
+    if (!track) return;
+    peersRef.current.forEach((_pc, peerId) => {
+      void publishScreenShare(peerId, track);
+    });
+    return () => {
+      Array.from(screenPeersRef.current.keys()).forEach(closeScreenPeer);
+    };
+  }, [roomId, userId, isScreenShare, localStream, publishScreenShare, closeScreenPeer]);
 
   useEffect(() => {
     if (!roomId || !userId) return; // Wait for room join
@@ -420,6 +499,24 @@ export const useWebRTC = (
         }
     });
 
+    signaling.on('screen-offer', (payload: any) => {
+      if (payload.targetUserId === userId || payload.targetUserId === 'all') {
+        void handleScreenOffer(payload.callerId, payload.userName, payload.offer);
+      }
+    });
+
+    signaling.on('screen-answer', async (payload: any) => {
+      if (payload.targetUserId !== userId) return;
+      const pc = screenPeersRef.current.get(payload.callerId);
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+    });
+
+    signaling.on('screen-ice-candidate', async (payload: any) => {
+      if (payload.targetUserId !== userId) return;
+      const pc = screenPeersRef.current.get(payload.callerId);
+      if (pc) await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
+    });
+
     signaling.on('user-disconnected', (id: string) => handleUserDisconnected(id));
 
     return () => {
@@ -429,13 +526,18 @@ export const useWebRTC = (
       signaling.off('ice-candidate');
       signaling.off('peer-media-state');
       signaling.off('screen-share-state');
+      signaling.off('screen-offer');
+      signaling.off('screen-answer');
+      signaling.off('screen-ice-candidate');
       signaling.off('user-disconnected');
       
       peersRef.current.forEach(pc => pc.close());
       peersRef.current.clear();
+      screenPeersRef.current.forEach(pc => pc.close());
+      screenPeersRef.current.clear();
       prevStatsRef.current.clear();
     };
-  }, [roomId, userId, handleUserConnected, handleOffer, handleAnswer, handleIceCandidate, handleUserDisconnected]);
+  }, [roomId, userId, handleUserConnected, handleOffer, handleAnswer, handleIceCandidate, handleScreenOffer, handleUserDisconnected]);
 
-  return { remoteStreams, connectionStats, peerNames, peerScreenShares, peerMediaStates };
+  return { remoteStreams, connectionStats, peerNames, peerScreenShares, peerScreenStreams, peerMediaStates };
 };

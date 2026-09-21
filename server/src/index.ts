@@ -68,6 +68,15 @@ const getHostSocketId = (roomId: string) => {
   return Array.from(socketToUser.entries()).find(([_, userId]) => userId === hostId)?.[0];
 };
 
+const getSocketUserId = (socket: Socket) => socketToUser.get(socket.id);
+const isActiveRoomMember = (socket: Socket, roomId: string) => {
+  const userId = getSocketUserId(socket);
+  return !!userId && userToRoom.get(userId) === roomId && rooms.get(roomId)?.has(userId) === true;
+};
+
+const isValidRoomId = (roomId: unknown): roomId is string =>
+  typeof roomId === 'string' && /^[a-z0-9_-]{1,64}$/i.test(roomId);
+
 const emitRoomParticipants = (roomId: string) => {
   const meta = roomMetadata.get(roomId);
   const hostSocketId = getHostSocketId(roomId);
@@ -80,8 +89,6 @@ const emitRoomParticipants = (roomId: string) => {
   }));
   io.to(hostSocketId).emit('room-participants', { participants });
 };
-
-const startTime = Date.now();
 
 // Helpers
 const getPublicRooms = () => {
@@ -97,7 +104,6 @@ const getPublicRooms = () => {
           isPublic: true,
           isLocked: metadata.isLocked,
           waitingRoom: metadata.waitingRoom,
-          createdAt: metadata.createdAt
         });
       }
     }
@@ -115,7 +121,6 @@ const getRoomSettings = (roomId: string) => {
   return {
     isLocked: meta?.isLocked || false,
     waitingRoom: meta?.waitingRoom || false,
-    hostId: meta?.hostId,
     startedAt: meta?.createdAt
   };
 };
@@ -145,12 +150,11 @@ app.get('/api', (_req: Request, res: Response) => {
     endpoints: {
       health: '/api/health',
       rooms: '/api/rooms',
-      stats: '/api/stats',
     },
     signaling: {
       protocol: 'socket.io',
       port: PORT,
-      transports: ['websocket', 'polling']
+       transports: ['polling']
     }
   });
 });
@@ -159,13 +163,6 @@ app.get('/api', (_req: Request, res: Response) => {
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
-    uptime: Math.floor(process.uptime()),
-    timestamp: Date.now(),
-    serverTime: new Date().toISOString(),
-    activeRooms: rooms.size,
-    publicRooms: getPublicRooms().length,
-    activeConnections: io.engine.clientsCount,
-    nodeVersion: process.version,
     version: '2.0.0'
   });
 });
@@ -186,7 +183,7 @@ app.get('/api/rooms/:roomId', (req: Request, res: Response) => {
   const meta = roomMetadata.get(roomId);
   const userSet = rooms.get(roomId);
 
-  if (!meta || !userSet) {
+  if (!meta || !userSet || !meta.isPublic) {
     res.status(404).json({
       success: false,
       message: 'Room not found or currently empty'
@@ -203,23 +200,6 @@ app.get('/api/rooms/:roomId', (req: Request, res: Response) => {
     isLocked: meta.isLocked,
     waitingRoom: meta.waitingRoom,
     createdAt: meta.createdAt
-  });
-});
-
-// Server Statistics
-app.get('/api/stats', (_req: Request, res: Response) => {
-  const mem = process.memoryUsage();
-  res.json({
-    uptime: Math.floor(process.uptime()),
-    startedAt: new Date(startTime).toISOString(),
-    totalActiveRooms: rooms.size,
-    publicRoomsCount: getPublicRooms().length,
-    totalSockets: io.engine.clientsCount,
-    memory: {
-      rssMb: Math.round(mem.rss / 1024 / 1024 * 100) / 100,
-      heapUsedMb: Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100,
-      heapTotalMb: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100,
-    }
   });
 });
 
@@ -242,11 +222,24 @@ io.on('connection', (socket: Socket) => {
 
   // Join Room
   socket.on('join-room', (roomId: string, odId: string, config?: { isPublic: boolean; name: string; waitingRoom?: boolean }, userName?: string) => {
-    if (!roomId || !odId) return;
-
-    if (userName) {
-      userNames.set(odId, userName);
+    const authenticatedUserId = typeof socket.handshake.auth?.userId === 'string'
+      ? socket.handshake.auth.userId.trim()
+      : '';
+    if (!authenticatedUserId || authenticatedUserId !== odId || !isValidRoomId(roomId)) {
+      socket.emit('auth-error', { message: 'Invalid signaling identity or room ID.' });
+      return;
     }
+
+    const existingSocketId = Array.from(socketToUser.entries())
+      .find(([socketId, userId]) => socketId !== socket.id && userId === odId)?.[0];
+    if (existingSocketId) {
+      socket.emit('auth-error', { message: 'This participant is already connected.' });
+      return;
+    }
+
+    const safeUserName = (userName || odId).trim().slice(0, 80) || odId;
+
+    userNames.set(odId, safeUserName);
 
     const existingMeta = roomMetadata.get(roomId);
     const isNewRoom = !existingMeta;
@@ -265,7 +258,7 @@ io.on('connection', (socket: Socket) => {
       }
 
       const waiting = waitingRooms.get(roomId)!;
-      waiting.set(odId, { odId, socketId: socket.id, userName: userName || odId });
+       waiting.set(odId, { odId, socketId: socket.id, userName: safeUserName });
       socketToUser.set(socket.id, odId);
 
       socket.emit('waiting-room', { roomId, position: waiting.size });
@@ -281,7 +274,7 @@ io.on('connection', (socket: Socket) => {
         });
       }
 
-      console.log(`[Room ${roomId}] User ${odId} (${userName || 'Unknown'}) added to waiting room`);
+       console.log(`[Room ${roomId}] User ${odId} added to waiting room`);
       return;
     }
 
@@ -294,7 +287,7 @@ io.on('connection', (socket: Socket) => {
       rooms.set(roomId, new Set());
       roomMetadata.set(roomId, {
         isPublic: config?.isPublic || false,
-        name: config?.name || `Room ${roomId}`,
+         name: (config?.name || `Room ${roomId}`).trim().slice(0, 100),
         hostId: odId,
         isLocked: false,
         waitingRoom: config?.waitingRoom || false,
@@ -394,6 +387,7 @@ io.on('connection', (socket: Socket) => {
       if (targetSocket) {
         targetSocket.emit('denied', { roomId });
         socketToUser.delete(waitingUser.socketId);
+        userNames.delete(odId);
       }
 
       const updatedPayload = {
@@ -471,7 +465,7 @@ io.on('connection', (socket: Socket) => {
   // WebRTC Signaling: Offer
   socket.on('offer', (payload) => {
     const roomId = userToRoom.get(socketToUser.get(socket.id) || '');
-    if (roomId) {
+    if (roomId && rooms.get(roomId)?.has(payload.targetUserId)) {
       socket.to(roomId).emit('offer', {
         callerId: socketToUser.get(socket.id),
         userName: payload.userName,
@@ -487,7 +481,7 @@ io.on('connection', (socket: Socket) => {
   // WebRTC Signaling: Answer
   socket.on('answer', (payload) => {
     const roomId = userToRoom.get(socketToUser.get(socket.id) || '');
-    if (roomId) {
+    if (roomId && rooms.get(roomId)?.has(payload.targetUserId)) {
       socket.to(roomId).emit('answer', {
         callerId: socketToUser.get(socket.id),
         userName: payload.userName,
@@ -503,7 +497,7 @@ io.on('connection', (socket: Socket) => {
   // WebRTC Signaling: ICE Candidate
   socket.on('ice-candidate', (payload) => {
     const roomId = userToRoom.get(socketToUser.get(socket.id) || '');
-    if (roomId) {
+    if (roomId && rooms.get(roomId)?.has(payload.targetUserId)) {
       socket.to(roomId).emit('ice-candidate', {
         callerId: socketToUser.get(socket.id),
         candidate: payload.candidate,
@@ -514,26 +508,45 @@ io.on('connection', (socket: Socket) => {
 
   // Chat message
   socket.on('chat-message', (payload) => {
-    socket.to(payload.roomId).emit('chat-message', payload.message);
+    const userId = getSocketUserId(socket);
+    if (!userId || !isActiveRoomMember(socket, payload.roomId) || !payload.message) return;
+    const text = typeof payload.message.text === 'string' ? payload.message.text.trim().slice(0, 2000) : '';
+    if (!text) return;
+    socket.to(payload.roomId).emit('chat-message', {
+      ...payload.message,
+      senderId: userId,
+      text,
+      timestamp: Date.now()
+    });
   });
 
   // Reaction
   socket.on('reaction', (payload) => {
-    socket.to(payload.roomId).emit('reaction', payload.reaction);
+    const userId = getSocketUserId(socket);
+    if (!userId || !isActiveRoomMember(socket, payload.roomId) || !payload.reaction) return;
+    const emoji = typeof payload.reaction.emoji === 'string' ? payload.reaction.emoji.slice(0, 16) : '';
+    if (!emoji) return;
+    socket.to(payload.roomId).emit('reaction', { ...payload.reaction, senderId: userId, emoji });
   });
 
   // Caption
   socket.on('caption', (payload) => {
-    socket.to(payload.roomId).emit('caption', payload.caption);
+    const userId = getSocketUserId(socket);
+    if (!userId || !isActiveRoomMember(socket, payload.roomId) || !payload.caption) return;
+    const text = typeof payload.caption.text === 'string' ? payload.caption.text.trim().slice(0, 500) : '';
+    if (!text) return;
+    socket.to(payload.roomId).emit('caption', { ...payload.caption, senderId: userId, text, timestamp: Date.now() });
   });
 
   // Whiteboard events
   socket.on('whiteboard-request-state', (payload: { roomId: string }) => {
+    if (!isActiveRoomMember(socket, payload.roomId)) return;
     const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
     socket.emit('whiteboard-state', state);
   });
 
   socket.on('whiteboard-draw', (payload) => {
+    if (!isActiveRoomMember(socket, payload.roomId) || !payload.data) return;
     const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
     state.draws.push(payload.data);
     if (state.draws.length > 20000) state.draws.splice(0, state.draws.length - 20000);
@@ -542,11 +555,13 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('whiteboard-clear', (payload) => {
+    if (!isActiveRoomMember(socket, payload.roomId)) return;
     whiteboardStates.set(payload.roomId, { draws: [], images: [], notes: [] });
     socket.to(payload.roomId).emit('whiteboard-clear');
   });
 
   socket.on('whiteboard-image', (payload: { roomId: string; image: string; x: number; y: number; width: number; height: number }) => {
+    if (!isActiveRoomMember(socket, payload.roomId) || typeof payload.image !== 'string' || payload.image.length > 2_000_000) return;
     const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
     state.images.push({ image: payload.image, x: payload.x, y: payload.y, width: payload.width, height: payload.height });
     whiteboardStates.set(payload.roomId, state);
@@ -554,6 +569,7 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('whiteboard-notes-update', (payload: { roomId: string; notes: any[] }) => {
+    if (!isActiveRoomMember(socket, payload.roomId) || !Array.isArray(payload.notes) || payload.notes.length > 100) return;
     const state = whiteboardStates.get(payload.roomId) || { draws: [], images: [], notes: [] };
     state.notes = payload.notes;
     whiteboardStates.set(payload.roomId, state);
@@ -562,13 +578,15 @@ io.on('connection', (socket: Socket) => {
 
   // Raise Hand event
   socket.on('raise-hand', (payload: { roomId: string; userId: string; isRaised: boolean; userName: string }) => {
-    socket.to(payload.roomId).emit('hand-raise-update', payload);
+    const userId = getSocketUserId(socket);
+    if (!userId || !isActiveRoomMember(socket, payload.roomId)) return;
+    socket.to(payload.roomId).emit('hand-raise-update', { ...payload, userId, userName: userNames.get(userId) || userId });
   });
 
   // Peer Media State (Mute & Camera on/off synchronization)
   socket.on('peer-media-state', (payload: { roomId: string; isMuted: boolean; isVideoStopped: boolean }) => {
     const senderUserId = socketToUser.get(socket.id);
-    if (senderUserId && payload.roomId) {
+    if (senderUserId && isActiveRoomMember(socket, payload.roomId)) {
       socket.to(payload.roomId).emit('peer-media-state', {
         userId: senderUserId,
         isMuted: payload.isMuted,
@@ -579,7 +597,7 @@ io.on('connection', (socket: Socket) => {
 
   socket.on('screen-share-state', (payload: { roomId: string; isScreenShare: boolean }) => {
     const senderUserId = socketToUser.get(socket.id);
-    if (senderUserId && payload.roomId) {
+    if (senderUserId && isActiveRoomMember(socket, payload.roomId)) {
       socket.to(payload.roomId).emit('screen-share-state', {
         userId: senderUserId,
         isScreenShare: payload.isScreenShare
@@ -587,9 +605,23 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
+  const forwardScreenSignal = (event: 'screen-offer' | 'screen-answer' | 'screen-ice-candidate', payload: any) => {
+    const roomId = userToRoom.get(socketToUser.get(socket.id) || '');
+    if (!roomId || !payload.targetUserId || !rooms.get(roomId)?.has(payload.targetUserId)) return;
+    socket.to(roomId).emit(event, {
+      ...payload,
+      callerId: socketToUser.get(socket.id)
+    });
+  };
+
+  socket.on('screen-offer', (payload) => forwardScreenSignal('screen-offer', payload));
+  socket.on('screen-answer', (payload) => forwardScreenSignal('screen-answer', payload));
+  socket.on('screen-ice-candidate', (payload) => forwardScreenSignal('screen-ice-candidate', payload));
+
   // Handle explicit leave room
   socket.on('leave-room', (payload: { roomId: string; userId: string }) => {
     const { roomId, userId } = payload;
+    if (getSocketUserId(socket) !== userId || userToRoom.get(userId) !== roomId) return;
     socket.leave(roomId);
 
     const roomUsers = rooms.get(roomId);

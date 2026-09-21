@@ -337,6 +337,7 @@ interface VideoGridProps {
   captions?: Map<string, string>;
   peerNames?: Map<string, string>;
   peerScreenShares?: Map<string, boolean>;
+  peerScreenStreams?: Map<string, MediaStream>;
   isLocalScreenShare?: boolean;
   raisedHands?: Set<string>;
   localIsMuted?: boolean;
@@ -353,6 +354,7 @@ const VideoGrid: React.FC<VideoGridProps> = ({
   captions, 
   peerNames,
   peerScreenShares,
+  peerScreenStreams,
   isLocalScreenShare,
   raisedHands,
   localIsMuted = false,
@@ -374,13 +376,14 @@ const VideoGrid: React.FC<VideoGridProps> = ({
     }] : []),
     ...Array.from(remoteStreams.entries()).map(([id, stream]) => {
       const media = peerMediaStates?.get(id);
+      const isScreenShare = peerScreenShares?.get(id);
       return { 
         id, 
-        stream, 
+        stream: isScreenShare ? (peerScreenStreams?.get(id) || stream) : stream,
         isLocal: false,
         stats: connectionStats?.get(id),
         userName: peerNames?.get(id),
-        isScreenShare: peerScreenShares?.get(id),
+        isScreenShare,
         isMuted: media !== undefined ? media.isMuted : (stream.getAudioTracks().length === 0 || !stream.getAudioTracks()[0]?.enabled),
         isVideoStopped: media !== undefined ? media.isVideoStopped : (stream.getVideoTracks().length === 0 || !stream.getVideoTracks()[0]?.enabled)
       };
