@@ -28,11 +28,6 @@ const STUN_SERVERS: RTCConfiguration = {
   ],
 };
 
-interface RoomConfig {
-  isPublic: boolean;
-  name: string;
-}
-
 export const useWebRTC = (
   roomId: string, 
   userId: string, 
@@ -41,7 +36,7 @@ export const useWebRTC = (
   isScreenShare: boolean, 
   isMuted: boolean = false,
   isVideoStopped: boolean = false,
-  config?: RoomConfig
+  screenShareReplacementId?: string
 ) => {
   const [peers, setPeers] = useState<Map<string, RTCPeerConnection>>(new Map());
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
@@ -65,9 +60,9 @@ export const useWebRTC = (
   useEffect(() => {
     isScreenShareRef.current = isScreenShare;
     if (roomId && userId) {
-      signaling.emit('screen-share-state', { roomId, isScreenShare });
+      signaling.emit('screen-share-state', { roomId, isScreenShare, replaceUserId: screenShareReplacementId });
     }
-  }, [roomId, userId, isScreenShare]);
+  }, [roomId, userId, isScreenShare, screenShareReplacementId]);
 
   useEffect(() => {
     isMutedRef.current = isMuted;
@@ -394,39 +389,34 @@ export const useWebRTC = (
         pc.close();
         peersRef.current.delete(disconnectedUserId);
         setPeers(new Map(peersRef.current));
-        
-        setRemoteStreams((prev) => {
-            const newMap = new Map(prev);
-            newMap.delete(disconnectedUserId);
-            return newMap;
-        });
-        
-        setConnectionStats(prev => {
-            const newStats = new Map(prev);
-            newStats.delete(disconnectedUserId);
-            return newStats;
-        });
-
-        setPeerNames(prev => {
-            const newMap = new Map(prev);
-            newMap.delete(disconnectedUserId);
-            return newMap;
-        });
-
-        setPeerScreenShares(prev => {
-            const newMap = new Map(prev);
-            newMap.delete(disconnectedUserId);
-            return newMap;
-        });
-
-        setPeerMediaStates(prev => {
-            const newMap = new Map(prev);
-            newMap.delete(disconnectedUserId);
-            return newMap;
-        });
-        
-        prevStatsRef.current.delete(disconnectedUserId);
     }
+    setRemoteStreams(prev => {
+      const next = new Map(prev);
+      next.delete(disconnectedUserId);
+      return next;
+    });
+    setConnectionStats(prev => {
+      const next = new Map(prev);
+      next.delete(disconnectedUserId);
+      return next;
+    });
+    setPeerNames(prev => {
+      const next = new Map(prev);
+      next.delete(disconnectedUserId);
+      return next;
+    });
+    setPeerScreenShares(prev => {
+      const next = new Map(prev);
+      next.delete(disconnectedUserId);
+      return next;
+    });
+    setPeerMediaStates(prev => {
+      const next = new Map(prev);
+      next.delete(disconnectedUserId);
+      return next;
+    });
+    prevStatsRef.current.delete(disconnectedUserId);
+    setPeers(new Map(peersRef.current));
   }, [closeScreenPeer]);
 
   useEffect(() => {
@@ -445,9 +435,6 @@ export const useWebRTC = (
     if (!roomId || !userId) return; // Wait for room join
 
     signaling.connect(userId);
-    // Pass config if available
-    signaling.emit('join-room', roomId, userId, config);
-
     signaling.on('user-connected', (data: any) => {
         const targetId = typeof data === 'string' ? data : data.senderId;
         if(targetId && targetId !== userId) {
@@ -489,15 +476,18 @@ export const useWebRTC = (
         }
     });
 
-    signaling.on('screen-share-state', (payload: { userId: string; isScreenShare: boolean }) => {
+    signaling.on('screen-share-state', (payload: { userId: string; isScreenShare: boolean; userName?: string }) => {
         if (payload.userId && payload.userId !== userId) {
           setPeerScreenShares(prev => {
             const next = new Map(prev);
             next.set(payload.userId, payload.isScreenShare);
             return next;
           });
+          if (payload.userName) {
+            setPeerNames(names => new Map(names).set(payload.userId, payload.userName!));
+          }
         }
-    });
+      });
 
     signaling.on('screen-offer', (payload: any) => {
       if (payload.targetUserId === userId || payload.targetUserId === 'all') {

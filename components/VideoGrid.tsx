@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MicOff, Signal, SignalMedium, SignalLow, Activity, Pin, PinOff } from 'lucide-react';
+import { MicOff, Signal, SignalMedium, SignalLow, Activity, Pin, PinOff, VideoOff, UserX } from 'lucide-react';
 import { signaling } from '../services/socket';
 import { Reaction, ConnectionStats } from '../types';
 
@@ -17,6 +17,11 @@ interface VideoTileProps {
   isHandRaised?: boolean;
   isPinned?: boolean;
   onTogglePin?: () => void;
+  isHost?: boolean;
+  participantId?: string;
+  onMuteParticipant?: (userId: string) => void;
+  onDisableCameraParticipant?: (userId: string) => void;
+  onKickParticipant?: (userId: string) => void;
 }
 
 const VideoTile: React.FC<VideoTileProps> = ({ 
@@ -32,7 +37,12 @@ const VideoTile: React.FC<VideoTileProps> = ({
   isScreenShare,
   isHandRaised = false,
   isPinned = false,
-  onTogglePin
+  onTogglePin,
+  isHost = false,
+  participantId,
+  onMuteParticipant,
+  onDisableCameraParticipant,
+  onKickParticipant
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [trackHasVideo, setTrackHasVideo] = useState(true);
@@ -256,6 +266,41 @@ const VideoTile: React.FC<VideoTileProps> = ({
           </button>
         )}
 
+        {isHost && !isLocal && participantId && (
+          <div className="flex items-center gap-1 rounded-xl border border-white/15 bg-black/60 p-1 backdrop-blur-md">
+            {onMuteParticipant && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onMuteParticipant(participantId); }}
+                className="rounded-lg p-1.5 text-amber-300 hover:bg-amber-500/20"
+                title="Mute participant"
+              >
+                <MicOff className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onDisableCameraParticipant && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDisableCameraParticipant(participantId); }}
+                className="rounded-lg p-1.5 text-blue-300 hover:bg-blue-500/20"
+                title="Disable camera"
+              >
+                <VideoOff className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {onKickParticipant && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onKickParticipant(participantId); }}
+                className="rounded-lg p-1.5 text-rose-300 hover:bg-rose-500/20"
+                title="Remove participant"
+              >
+                <UserX className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Network Stats Indicator (Only for remote peers) */}
         {!isLocal && stats && (
           <div className="group/stats relative">
@@ -336,6 +381,10 @@ interface VideoGridProps {
   localIsMuted?: boolean;
   localIsVideoStopped?: boolean;
   peerMediaStates?: Map<string, { isMuted: boolean; isVideoStopped: boolean }>;
+  isHost?: boolean;
+  onMuteParticipant?: (userId: string) => void;
+  onDisableCameraParticipant?: (userId: string) => void;
+  onKickParticipant?: (userId: string) => void;
 }
 
 const VideoGrid: React.FC<VideoGridProps> = ({ 
@@ -352,7 +401,11 @@ const VideoGrid: React.FC<VideoGridProps> = ({
   raisedHands,
   localIsMuted = false,
   localIsVideoStopped = false,
-  peerMediaStates
+  peerMediaStates,
+  isHost = false,
+  onMuteParticipant,
+  onDisableCameraParticipant,
+  onKickParticipant
 }) => {
   const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
 
@@ -452,8 +505,13 @@ const VideoGrid: React.FC<VideoGridProps> = ({
               caption={captions?.get(spotlightStream.id)}
               isScreenShare={spotlightStream.isScreenShare}
               isHandRaised={raisedHands?.has(spotlightStream.id)}
-              isPinned={pinnedPeerId === spotlightStream.id}
-              onTogglePin={() => togglePin(spotlightStream.id)}
+               isPinned={pinnedPeerId === spotlightStream.id}
+               onTogglePin={() => togglePin(spotlightStream.id)}
+               isHost={isHost}
+               participantId={spotlightStream.id.endsWith('-screen') ? spotlightStream.id.slice(0, -'-screen'.length) : spotlightStream.id}
+               onMuteParticipant={onMuteParticipant}
+               onDisableCameraParticipant={onDisableCameraParticipant}
+               onKickParticipant={onKickParticipant}
             />
           </div>
         </div>
@@ -474,8 +532,13 @@ const VideoGrid: React.FC<VideoGridProps> = ({
                 caption={captions?.get(p.id)}
                 isScreenShare={p.isScreenShare}
                 isHandRaised={raisedHands?.has(p.id)}
-                isPinned={pinnedPeerId === p.id}
-                onTogglePin={() => togglePin(p.id)}
+                 isPinned={pinnedPeerId === p.id}
+                 onTogglePin={() => togglePin(p.id)}
+                 isHost={isHost}
+                 participantId={p.id.endsWith('-screen') ? p.id.slice(0, -'-screen'.length) : p.id}
+                 onMuteParticipant={onMuteParticipant}
+                 onDisableCameraParticipant={onDisableCameraParticipant}
+                 onKickParticipant={onKickParticipant}
               />
             </div>
           ))}
@@ -517,8 +580,13 @@ const VideoGrid: React.FC<VideoGridProps> = ({
               caption={captions?.get(p.id)}
               isScreenShare={p.isScreenShare}
               isHandRaised={raisedHands?.has(p.id)}
-              isPinned={pinnedPeerId === p.id}
-              onTogglePin={() => togglePin(p.id)}
+               isPinned={pinnedPeerId === p.id}
+               onTogglePin={() => togglePin(p.id)}
+               isHost={isHost}
+               participantId={p.id.endsWith('-screen') ? p.id.slice(0, -'-screen'.length) : p.id}
+               onMuteParticipant={onMuteParticipant}
+               onDisableCameraParticipant={onDisableCameraParticipant}
+               onKickParticipant={onKickParticipant}
             />
           </div>
         ))}

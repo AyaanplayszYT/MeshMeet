@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
@@ -14,7 +15,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -24,6 +25,7 @@ const io = new Server(server, {
   },
   pingInterval: 10000,
   pingTimeout: 5000,
+  maxHttpBufferSize: 2_500_000,
 });
 
 // Data structures
@@ -34,6 +36,7 @@ interface RoomMeta {
   isLocked: boolean;
   waitingRoom: boolean;
   createdAt: number;
+  activeScreenShare?: string;
 }
 
 interface WaitingUser {
@@ -178,6 +181,12 @@ app.get('/api', (_req: Request, res: Response) => {
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+    serverTime: new Date().toISOString(),
+    activeRooms: rooms.size,
+    publicRooms: getPublicRooms().length,
+    activeConnections: io.engine.clientsCount,
     version: '2.0.0'
   });
 });
@@ -252,9 +261,12 @@ io.on('connection', (socket: Socket) => {
       return;
     }
 
-    const safeUserName = (userName || odId).trim().slice(0, 80) || odId;
+    if (socketToUser.get(socket.id) === odId && userToRoom.has(odId)) {
+      socket.emit('auth-error', { message: 'This participant is already in a room.' });
+      return;
+    }
 
-    userNames.set(odId, safeUserName);
+    const safeUserName = (typeof userName === 'string' ? userName : odId).trim().slice(0, 80) || odId;
 
     const existingMeta = roomMetadata.get(roomId);
     const isNewRoom = !existingMeta;
@@ -265,6 +277,8 @@ io.on('connection', (socket: Socket) => {
       console.log(`[Room ${roomId}] User ${odId} blocked - room is locked`);
       return;
     }
+
+    userNames.set(odId, safeUserName);
 
     // Check if waiting room is enabled and user is not the host
     if (existingMeta?.waitingRoom && existingMeta.hostId !== odId) {
@@ -301,11 +315,11 @@ io.on('connection', (socket: Socket) => {
     if (isNewRoom) {
       rooms.set(roomId, new Set());
       roomMetadata.set(roomId, {
-        isPublic: config?.isPublic || false,
-         name: (config?.name || `Room ${roomId}`).trim().slice(0, 100),
+        isPublic: config?.isPublic === true,
+        name: (typeof config?.name === 'string' ? config.name : `Room ${roomId}`).trim().slice(0, 100),
         hostId: odId,
         isLocked: false,
-        waitingRoom: config?.waitingRoom || false,
+        waitingRoom: config?.waitingRoom === true,
         createdAt: Date.now()
       });
       waitingRooms.set(roomId, new Map());
@@ -453,7 +467,7 @@ io.on('connection', (socket: Socket) => {
   socket.on('mute-user', (payload: { roomId: string; userId: string }) => {
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(payload.roomId);
-    if (meta?.hostId !== hostUserId || payload.userId === hostUserId) return;
+    if (meta?.hostId !== hostUserId || payload.userId === hostUserId || !rooms.get(payload.roomId)?.has(payload.userId)) return;
     const targetSocketId = Array.from(socketToUser.entries()).find(([_, userId]) => userId === payload.userId)?.[0];
     if (targetSocketId) io.to(targetSocketId).emit('host-muted', { roomId: payload.roomId });
   });
@@ -480,6 +494,15 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
+  socket.on('disable-camera-user', (payload: { roomId: string; userId: string }) => {
+    const hostUserId = socketToUser.get(socket.id);
+    const meta = roomMetadata.get(payload.roomId);
+    const roomUsers = rooms.get(payload.roomId);
+    if (meta?.hostId !== hostUserId || payload.userId === hostUserId || !roomUsers?.has(payload.userId)) return;
+    const targetSocketId = Array.from(socketToUser.entries()).find(([_, userId]) => userId === payload.userId)?.[0];
+    if (targetSocketId) io.to(targetSocketId).emit('host-camera-disabled', { roomId: payload.roomId });
+  });
+
   socket.on('kick-user', (payload: { roomId: string; userId: string }) => {
     const hostUserId = socketToUser.get(socket.id);
     const meta = roomMetadata.get(payload.roomId);
@@ -492,6 +515,14 @@ io.on('connection', (socket: Socket) => {
     targetSocket?.leave(payload.roomId);
     roomUsers.delete(payload.userId);
     if (targetSocketId) socketToUser.delete(targetSocketId);
+    if (meta?.activeScreenShare === payload.userId) {
+      delete meta.activeScreenShare;
+      io.to(payload.roomId).emit('screen-share-state', {
+        userId: payload.userId,
+        isScreenShare: false,
+        userName: userNames.get(payload.userId) || payload.userId
+      });
+    }
     userToRoom.delete(payload.userId);
     userNames.delete(payload.userId);
     socket.to(payload.roomId).emit('user-disconnected', payload.userId);
@@ -553,6 +584,7 @@ io.on('connection', (socket: Socket) => {
     socket.to(payload.roomId).emit('chat-message', {
       ...payload.message,
       senderId: userId,
+      senderName: userNames.get(userId) || userId,
       text,
       timestamp: Date.now()
     });
@@ -638,23 +670,56 @@ io.on('connection', (socket: Socket) => {
     }
   });
 
-  socket.on('screen-share-state', (payload: { roomId: string; isScreenShare: boolean }) => {
+  socket.on('screen-share-state', (payload: { roomId: string; isScreenShare: boolean; replaceUserId?: string }) => {
+    if (!allowEvent(socket, 'screen-share-state', 20)) return;
     const senderUserId = socketToUser.get(socket.id);
-    if (senderUserId && isActiveRoomMember(socket, payload.roomId)) {
-      socket.to(payload.roomId).emit('screen-share-state', {
-        userId: senderUserId,
-        isScreenShare: payload.isScreenShare
-      });
+    const meta = roomMetadata.get(payload.roomId);
+    if (!senderUserId || !meta || !isActiveRoomMember(socket, payload.roomId)) return;
+
+    if (payload.isScreenShare) {
+      const activeUserId = meta.activeScreenShare;
+      if (activeUserId && activeUserId !== senderUserId) {
+        if (payload.replaceUserId !== activeUserId) {
+          socket.emit('screen-share-conflict', {
+            userId: activeUserId,
+            userName: userNames.get(activeUserId) || activeUserId
+          });
+          return;
+        }
+
+        const previousSocketId = Array.from(socketToUser.entries()).find(([_, userId]) => userId === activeUserId)?.[0];
+        if (previousSocketId) {
+          io.to(previousSocketId).emit('screen-share-replaced', {
+            userId: senderUserId,
+            userName: userNames.get(senderUserId) || senderUserId
+          });
+        }
+        io.to(payload.roomId).emit('screen-share-state', {
+          userId: activeUserId,
+          isScreenShare: false,
+          userName: userNames.get(activeUserId) || activeUserId
+        });
+      }
+      meta.activeScreenShare = senderUserId;
+    } else if (meta.activeScreenShare === senderUserId) {
+      delete meta.activeScreenShare;
     }
+
+    io.to(payload.roomId).emit('screen-share-state', {
+      userId: senderUserId,
+      isScreenShare: payload.isScreenShare,
+      userName: userNames.get(senderUserId) || senderUserId
+    });
   });
 
   const forwardScreenSignal = (event: 'screen-offer' | 'screen-answer' | 'screen-ice-candidate', payload: any) => {
     if (!allowEvent(socket, event, 120)) return;
-    const roomId = userToRoom.get(socketToUser.get(socket.id) || '');
-    if (!roomId || !payload.targetUserId || !rooms.get(roomId)?.has(payload.targetUserId)) return;
+    const senderUserId = socketToUser.get(socket.id);
+    const roomId = userToRoom.get(senderUserId || '');
+    if (!senderUserId || roomMetadata.get(roomId || '')?.activeScreenShare !== senderUserId || !roomId || !payload.targetUserId || !rooms.get(roomId)?.has(payload.targetUserId)) return;
     socket.to(roomId).emit(event, {
       ...payload,
-      callerId: socketToUser.get(socket.id)
+      callerId: senderUserId
     });
   };
 
@@ -673,6 +738,15 @@ io.on('connection', (socket: Socket) => {
 
     if (roomUsers) {
       roomUsers.delete(userId);
+
+      if (meta?.activeScreenShare === userId) {
+        delete meta.activeScreenShare;
+        socket.to(roomId).emit('screen-share-state', {
+          userId,
+          isScreenShare: false,
+          userName: userNames.get(userId) || userId
+        });
+      }
 
       // Transfer host if host leaves
       if (meta?.hostId === userId && roomUsers.size > 0) {
@@ -722,6 +796,7 @@ io.on('connection', (socket: Socket) => {
     socket.to(roomId).emit('user-disconnected', userId);
     userToRoom.delete(userId);
     userNames.delete(userId);
+    socketToUser.delete(socket.id);
     broadcastPublicRooms();
   });
 
@@ -755,6 +830,15 @@ io.on('connection', (socket: Socket) => {
       const meta = roomMetadata.get(roomId);
 
       roomUsers?.delete(odId);
+
+      if (meta?.activeScreenShare === odId) {
+        delete meta.activeScreenShare;
+        socket.to(roomId).emit('screen-share-state', {
+          userId: odId,
+          isScreenShare: false,
+          userName: userNames.get(odId) || odId
+        });
+      }
 
       // Transfer host if necessary
       if (meta?.hostId === odId && roomUsers && roomUsers.size > 0) {
@@ -828,12 +912,14 @@ server.listen(PORT, '0.0.0.0', () => {
 });
 
 // Process signal handling
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received. Shutting down gracefully.');
-  server.close(() => process.exit(0));
-});
+let isShuttingDown = false;
+const shutdown = (signal: string) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`${signal} signal received. Shutting down gracefully.`);
+  io.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 10_000).unref();
+};
 
-process.on('SIGINT', () => {
-  console.log('SIGINT signal received. Shutting down gracefully.');
-  server.close(() => process.exit(0));
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

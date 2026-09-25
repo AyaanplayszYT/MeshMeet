@@ -4,7 +4,7 @@ import {
   Image as ImageIcon, StickyNote as StickyNoteIcon, Maximize2, LayoutGrid, Plus
 } from 'lucide-react';
 import { signaling } from '../services/socket';
-import { DrawLine, ShapeType, StickyNote } from '../types';
+import { DrawLine, ShapeType, StickyNote, WhiteboardState } from '../types';
 
 interface WhiteboardProps {
   roomId: string;
@@ -383,7 +383,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
     resizeObserver.observe(containerRef.current);
 
     // Socket Event Listeners
-    const handleRemoteDraw = (data: DrawLine) => {
+    const renderDraw = (data: DrawLine) => {
       if (!ctx || !canvas) return;
       const { prevX, prevY, currX, currY, color: remoteColor, width: remoteWidth, shape } = data;
       const displayWidth = canvas.clientWidth || canvas.width;
@@ -420,9 +420,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
       }
     };
 
+    const handleRemoteDraw = (data: DrawLine) => {
+      renderDraw(data);
+    };
+
     const handleClear = () => {
       if (!ctx || !canvas) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setNotes([]);
     };
 
     const handleRemoteImage = (payload: { image: string; x: number; y: number; width: number; height: number }) => {
@@ -433,10 +438,26 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
       setNotes(updatedNotes);
     };
 
+    const handleRemoteState = (state: WhiteboardState) => {
+      if (!ctx || !canvas) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setNotes(Array.isArray(state.notes) ? state.notes : []);
+      (Array.isArray(state.draws) ? state.draws : []).forEach((draw) => renderDraw(draw));
+      (Array.isArray(state.images) ? state.images : []).forEach((image) => drawImageOnCanvas(
+        image.image,
+        image.x,
+        image.y,
+        image.width,
+        image.height
+      ));
+    };
+
     signaling.on('whiteboard-draw', handleRemoteDraw);
     signaling.on('whiteboard-clear', handleClear);
     signaling.on('whiteboard-image', handleRemoteImage);
     signaling.on('whiteboard-notes-update', handleRemoteNotes);
+    signaling.on('whiteboard-state', handleRemoteState);
+    signaling.emit('whiteboard-request-state', { roomId });
 
     return () => {
       resizeObserver.disconnect();
@@ -444,8 +465,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({
       signaling.off('whiteboard-clear', handleClear);
       signaling.off('whiteboard-image', handleRemoteImage);
       signaling.off('whiteboard-notes-update', handleRemoteNotes);
+      signaling.off('whiteboard-state', handleRemoteState);
     };
-  }, [isOpen, drawImageOnCanvas]);
+  }, [isOpen, roomId, drawImageOnCanvas]);
 
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     if (!canvasRef.current) return { x: 0, y: 0 };

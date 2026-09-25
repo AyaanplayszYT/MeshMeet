@@ -17,6 +17,7 @@ export interface User {
 export interface ChatMessage {
   id: string;
   senderId: string;
+  senderName?: string;
   text: string;
   timestamp: number;
 }
@@ -145,7 +146,9 @@ export interface ServerToClientEvents {
   'host-muted': (payload: { roomId: string }) => void;
   'host-camera-disabled': (payload: { roomId: string }) => void;
   'kicked': (payload: { roomId: string }) => void;
-  'screen-share-state': (payload: { userId: string; isScreenShare: boolean }) => void;
+  'screen-share-state': (payload: { userId: string; isScreenShare: boolean; userName?: string }) => void;
+  'screen-share-conflict': (payload: { userId: string; userName: string }) => void;
+  'screen-share-replaced': (payload: { userId: string; userName: string }) => void;
   'screen-offer': (payload: { callerId: string; userName: string; offer: RTCSessionDescriptionInit }) => void;
   'screen-answer': (payload: { callerId: string; answer: RTCSessionDescriptionInit }) => void;
   'screen-ice-candidate': (payload: { callerId: string; candidate: RTCIceCandidateInit }) => void;
@@ -175,12 +178,13 @@ export interface ClientToServerEvents {
   'toggle-waiting-room': (payload: { roomId: string }) => void;
   'raise-hand': (payload: { roomId: string; userId: string; isRaised: boolean; userName: string }) => void;
   'peer-media-state': (payload: { roomId: string; isMuted: boolean; isVideoStopped: boolean }) => void;
-  'screen-share-state': (payload: { roomId: string; isScreenShare: boolean }) => void;
+  'screen-share-state': (payload: { roomId: string; isScreenShare: boolean; replaceUserId?: string }) => void;
   'screen-offer': (payload: { targetUserId: string; userName: string; offer: RTCSessionDescriptionInit }) => void;
   'screen-answer': (payload: { targetUserId: string; answer: RTCSessionDescriptionInit }) => void;
   'screen-ice-candidate': (payload: { targetUserId: string; candidate: RTCIceCandidateInit }) => void;
   'get-room-participants': (payload: { roomId: string }) => void;
   'mute-user': (payload: { roomId: string; userId: string }) => void;
+  'disable-camera-user': (payload: { roomId: string; userId: string }) => void;
   'kick-user': (payload: { roomId: string; userId: string }) => void;
   'mute-all': (payload: { roomId: string }) => void;
   'disable-camera-all': (payload: { roomId: string }) => void;

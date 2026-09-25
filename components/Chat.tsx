@@ -25,7 +25,7 @@ const Chat: React.FC<ChatProps> = ({ isOpen, onClose, roomId, userId, peerNames,
     signaling.on('chat-message', (msg: ChatMessage) => {
       setMessages((prev) => [...prev, msg]);
       if (msg.senderId !== userId) {
-        const senderName = peerNames?.get(msg.senderId) || 'Someone';
+        const senderName = msg.senderName || peerNames?.get(msg.senderId) || msg.senderId;
         onNewMessage?.(senderName, msg.text);
       }
     });
@@ -63,7 +63,7 @@ const Chat: React.FC<ChatProps> = ({ isOpen, onClose, roomId, userId, peerNames,
 
   const getSenderName = (id: string) => {
       if (id === userId) return myUserName || 'You';
-      return peerNames?.get(id) || `Peer ${id.slice(0, 2)}`;
+      return peerNames?.get(id) || id;
   };
 
   return (

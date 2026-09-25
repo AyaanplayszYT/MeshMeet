@@ -48,6 +48,7 @@ const App = () => {
   // Media State
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [screenShareReplacementId, setScreenShareReplacementId] = useState<string | undefined>();
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoStopped, setIsVideoStopped] = useState(false);
   const [isNoiseCancellationEnabled, setIsNoiseCancellationEnabled] = useState(true);
@@ -72,10 +73,15 @@ const App = () => {
   // Preview Video Ref
   const previewVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
     localStreamRef.current = localStream;
   }, [localStream]);
+
+  useEffect(() => {
+    screenStreamRef.current = screenStream;
+  }, [screenStream]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -215,10 +221,25 @@ const App = () => {
     signaling.on('kicked', () => {
       localStreamRef.current?.getTracks().forEach(track => track.stop());
       setLocalStream(null);
-      screenStream?.getTracks().forEach(track => track.stop());
+      screenStreamRef.current?.getTracks().forEach(track => track.stop());
       setScreenStream(null);
+      setScreenShareReplacementId(undefined);
       setError('You were removed from the meeting by the host.');
       setMode('home');
+    });
+
+    signaling.on('screen-share-conflict', (payload: { userId: string; userName: string }) => {
+      screenStreamRef.current?.getTracks().forEach(track => track.stop());
+      setScreenStream(null);
+      setScreenShareReplacementId(undefined);
+      showToast(`${payload.userName} is already sharing their screen.`);
+    });
+
+    signaling.on('screen-share-replaced', (payload: { userId: string; userName: string }) => {
+      screenStreamRef.current?.getTracks().forEach(track => track.stop());
+      setScreenStream(null);
+      setScreenShareReplacementId(undefined);
+      showToast(`${payload.userName} started sharing their screen.`);
     });
     
     signaling.on('room-settings-update', (settings: RoomSettings) => {
@@ -294,6 +315,8 @@ const App = () => {
       signaling.off('host-muted');
       signaling.off('host-camera-disabled');
       signaling.off('kicked');
+      signaling.off('screen-share-conflict');
+      signaling.off('screen-share-replaced');
       signaling.off('room-settings-update');
       signaling.off('host-changed');
       signaling.off('room-closed');
@@ -442,7 +465,6 @@ const App = () => {
     return finalStream;
   }, [screenStream, finalStream, localStream]);
 
-  const roomConfig = { isPublic, name: roomName, waitingRoom: waitingRoomEnabled };
   const { remoteStreams, connectionStats, peerNames, peerScreenShares, peerScreenStreams, peerMediaStates } = useWebRTC(
       mode === 'room' ? roomId : '', 
       userId, 
@@ -451,7 +473,7 @@ const App = () => {
       !!screenStream, 
       isMuted,
       isVideoStopped,
-      roomConfig
+      screenShareReplacementId
   );
 
   const toggleMute = () => {
@@ -490,12 +512,22 @@ const App = () => {
       if (screenStream) {
           screenStream.getTracks().forEach(t => t.stop());
           setScreenStream(null);
+          setScreenShareReplacementId(undefined);
       } else {
           if (!navigator.mediaDevices?.getDisplayMedia) {
             showToast('Screen sharing is not supported in this browser.');
             return;
           }
           try {
+              const currentShare = Array.from(peerScreenShares.entries()).find(([, sharing]) => sharing);
+              let replacementId: string | undefined;
+              if (currentShare) {
+                const currentShareName = peerNames.get(currentShare[0]) || 'another participant';
+                if (!window.confirm(`${currentShareName} is sharing their screen. Stop their screen share and start yours?`)) {
+                  return;
+                }
+                replacementId = currentShare[0];
+              }
               // Keep microphone audio from the local stream; display audio is optional and
               // causes capture to fail in browsers that do not support system-audio sharing.
               const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
@@ -504,10 +536,12 @@ const App = () => {
                 stream.getTracks().forEach(track => track.stop());
                 throw new Error('The browser returned no screen video track.');
               }
+              setScreenShareReplacementId(replacementId);
               setScreenStream(stream);
               showToast('Screen sharing started');
               videoTrack.onended = () => {
-                  setScreenStream(null);
+                setScreenStream(null);
+                setScreenShareReplacementId(undefined);
               };
           } catch (error: any) {
               console.error('Screen share failed', error);
@@ -630,6 +664,7 @@ const App = () => {
     screenStream?.getTracks().forEach(t => t.stop());
     setLocalStream(null);
     setScreenStream(null);
+    setScreenShareReplacementId(undefined);
     setMode('left');
     setShowWhiteboard(false);
   };
@@ -789,6 +824,10 @@ const App = () => {
                     localIsMuted={isMuted}
                     localIsVideoStopped={isVideoStopped}
                     peerMediaStates={peerMediaStates}
+                    isHost={isHost}
+                    onMuteParticipant={handleMuteParticipant}
+                    onDisableCameraParticipant={(participantId) => signaling.emit('disable-camera-user', { roomId, userId: participantId })}
+                    onKickParticipant={handleKickParticipant}
                   />
                 )}
               </div>
@@ -810,6 +849,10 @@ const App = () => {
                   localIsMuted={isMuted}
                   localIsVideoStopped={isVideoStopped}
                   peerMediaStates={peerMediaStates}
+                  isHost={isHost}
+                  onMuteParticipant={handleMuteParticipant}
+                  onDisableCameraParticipant={(participantId) => signaling.emit('disable-camera-user', { roomId, userId: participantId })}
+                  onKickParticipant={handleKickParticipant}
                 />
               ) : (
                 <div className="flex items-center justify-center w-full h-full">
